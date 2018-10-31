@@ -1,0 +1,8 @@
+autograd
+tqdm
+scipy
+emcee
+celerite
+george
+astropy
+numpy
