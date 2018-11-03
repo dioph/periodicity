@@ -7,10 +7,13 @@ from scipy.stats import linregress
 from astropy.convolution import Box1DKernel
 from tqdm import tqdm
 
-from .acf import acf, find_peaks, gaussian, filt, smooth
+from .acf import acf, find_peaks, gaussian, smooth, filt
 
 
 class GPModeler(object):
+    """
+    Abstract class implementing common functions for a GP Model
+    """
     def __init__(self, t, x):
         self.t = t
         self.x = x
@@ -53,13 +56,13 @@ class GPModeler(object):
             r = np.random.randn(N * (ndim - 1)).reshape((N, ndim - 1))
             for i in range(ndim - 1):
                 samples[m, i] = r[m, i] * self.std[i] + self.mean[i]
-            samples[m, -1] = self.sample_per(nbad)
+            samples[m, -1] = self.sample_period(nbad)
             lp = np.array([self.lnprior(p) for p in samples])
             m = ~np.isfinite(lp)
             nbad = m.sum()
         return samples
 
-    def sample_per(self, N):
+    def sample_period(self, N):
         logP = np.arange(self.bounds['log_P'][0], self.bounds['log_P'][1], .005)
         probs = self.prior(logP)
         probs /= probs.sum()
@@ -82,6 +85,20 @@ class GPModeler(object):
         pass
 
     def minimize(self):
+        """
+        Minimizes negative log-likelihood function within bounds
+
+        Returns
+        -------
+        t: array-like
+            5000 uniform time samples within modeler time array
+        mu: array-like
+            predicted mean function with maximum likelihood hyperparameters
+        std: array-like
+            predicted error at each sample with maximum likelihood hyperparameters
+        v: list
+            maximum likelihood hyperparameters
+        """
         assert self.t.size <= 10000, "Don't forget to decimate before minimizing! (N={})".format(self.t.size)
         self.gp.compute(self.t)
         p0 = self.gp.get_parameter_vector()
@@ -95,6 +112,25 @@ class GPModeler(object):
         return t, mu, std, results.x
 
     def mcmc(self, nwalkers=50, nsteps=1000, burn=0, useprior=False):
+        """
+        Samples the posterior probability distribution with a Markov Chain Monte Carlo simulation
+
+        Parameters
+        ----------
+        nwalkers: int (optional default=50)
+            number of walkers
+        nsteps: int (optional default=1000)
+            number of steps taken by each walker
+        burn: int (optional default=0)
+            number of burn-in samples to remove from the beginning of the simulation
+        useprior: bool (optional default=False)
+            whether to sample from the prior distribution or use a ball centered at the current hyperparameter vector
+
+        Returns
+        -------
+        samples: array-like
+            resulting samples of the posterior distribution of the hyperparameters
+        """
         ndim = len(self.gp)
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob)
         p = self.gp.get_parameter_vector()
@@ -109,6 +145,9 @@ class GPModeler(object):
 
 
 class CustomTerm(celerite.terms.Term):
+    """
+    Custom sum of exponentials kernel designed for `FastGPModeler`
+    """
     parameter_names = ("log_B", "log_C", "log_L", "log_P")
 
     def get_real_coefficients(self, params):
@@ -127,6 +166,9 @@ class CustomTerm(celerite.terms.Term):
 
 
 class FastGPModeler(GPModeler):
+    """
+    GP Model based on a sum of exponentials kernel (fast but not so strong)
+    """
     def __init__(self, t, x, log_sigma=-17, log_B=-13, log_C=0, log_L=3, log_P=2, bounds=None, std=None):
         super(FastGPModeler, self).__init__(t, x)
         self.mean = (log_sigma, log_B, log_C, log_L)
@@ -147,6 +189,9 @@ class FastGPModeler(GPModeler):
 
 
 class StrongGPModeler(GPModeler):
+    """
+    GP Model based on Quasi-Periodic kernel (strong but not so fast)
+    """
     def __init__(self, t, x, log_sigma=-17, log_A=-13, log_L=5, log_G=1.9, log_P=2, bounds=None, std=None):
         super(StrongGPModeler, self).__init__(t, x)
         self.mean = (log_sigma, log_A, log_L, log_G)
@@ -168,12 +213,34 @@ class StrongGPModeler(GPModeler):
 
 
 def acf_harmonic_quality(t, x, pmin=None, periods=None):
+    """
+    Calculates the quality of the ACF of a band-pass filtered version of the signal
+
+    t: array-like
+        time array
+    x: array-like
+        signal array
+    pmin: float (optional)
+        lower cutoff period to filter signal
+    periods: list (optional)
+        list of higher cutoff periods to filter signal
+
+    Returns
+    -------
+    ps: list
+        highest peaks (best periods) for each filtered version
+    hs: list
+        maximum heights for each filtered version
+    qs: list
+        quality factor of each best period
+    """
     if periods is None:
         periods = 2 ** np.arange(8)
     fs = 1 / np.median(np.diff(t))
     if pmin is None:
         pmin = max(np.min(periods) / 10, 2 / fs)
     t -= np.min(t)
+    periods = np.array([pi for pi in periods if pmin < pi < np.max(t) / 2])
     ps = []
     hs = []
     qs = []
@@ -190,7 +257,6 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None):
         bp_acf = t[peaks][np.argmax(heights)]
         ps.append(bp_acf)
         hs.append(np.max(heights))
-
         tau_max = 20 * pi / bp_acf
 
         def eps(params, lags, r):
@@ -208,6 +274,26 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None):
 
 
 def make_gaussian_prior(t, x, pmin=None, periods=None):
+    """
+    Generates a weighted sum of Gaussians as a probability prior on the signal period
+    Based on Angus et al. (2018) MNRAS 474, 2094A
+
+    Parameters
+    ----------
+    t: array-like
+        time array
+    x: array-like
+        input quasi-periodic signal
+    pmin: float (optional)
+        lower cutoff period to filter signal
+    periods: list (optional)
+        list of higher cutoff periods to filter signal
+
+    Returns
+    -------
+    gaussian_prior: callable
+        prior on logP
+    """
     ps, hs, qs = acf_harmonic_quality(t, x, pmin, periods)
 
     def gaussian_prior(logP):
@@ -222,4 +308,3 @@ def make_gaussian_prior(t, x, pmin=None, periods=None):
         return tot
 
     return gaussian_prior
-
