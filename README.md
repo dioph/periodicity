@@ -8,10 +8,10 @@ Useful tools for analysis of periodicities in time series data.
 ## Example using GP with astronomical data
 ```python
 from periodicity.gp import *
-from lightkurve import KeplerLightCurveFile
+from lightkurve import search_lightcurvefile
 
-lc = KeplerLightCurveFile.from_archive(target=9895037, quarter=4).PDCSAP_FLUX.normalize()
-lc = lc.append(KeplerLightCurveFile.from_archive(target=9895037, quarter=5).PDCSAP_FLUX.normalize())
+lcs = search_lightcurvefile(target=9895037, quarter=[4,5]).download_all()
+lc = lcs[0].PDCSAP_FLUX.normalize().append(lcs[1].PDCSAP_FLUX.normalize())
 lc = lc.remove_nans().remove_outliers().bin(binsize=4)
 
 t, x = lc.time, lc.flux
