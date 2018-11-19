@@ -1,26 +1,21 @@
 from autograd import numpy as np
-import george
-import celerite
 import emcee
-from scipy.optimize import minimize, least_squares
+from scipy.optimize import minimize
 from scipy.stats import linregress
-from astropy.convolution import Box1DKernel
 from tqdm import tqdm
 
-from .acf import acf, find_peaks, gaussian, smooth, filt
+from .acf import gaussian, acf_harmonic_quality
 
 
 class GPModeler(object):
-    """
-    Abstract class implementing common functions for a GP Model
-    """
+    """Abstract class implementing common functions for a GP Model"""
     def __init__(self, t, x):
         self.t = t
         self.x = x
 
-        def uniform_prior(p):
-            window = np.logical_and(self.bounds['log_P'][0] < p, p < self.bounds['log_P'][1])
-            probs = np.ones_like(p)
+        def uniform_prior(logP):
+            window = np.logical_and(self.bounds['log_P'][0] < logP, logP < self.bounds['log_P'][1])
+            probs = np.ones_like(logP)
             probs[~window] = 0.0
             return probs
 
@@ -85,8 +80,7 @@ class GPModeler(object):
         pass
 
     def minimize(self):
-        """
-        Minimizes negative log-likelihood function within bounds
+        """Minimizes negative log-likelihood function within bounds
 
         Returns
         -------
@@ -112,8 +106,7 @@ class GPModeler(object):
         return t, mu, std, results.x
 
     def mcmc(self, nwalkers=50, nsteps=1000, burn=0, useprior=False):
-        """
-        Samples the posterior probability distribution with a Markov Chain Monte Carlo simulation
+        """Samples the posterior probability distribution with a Markov Chain Monte Carlo simulation
 
         Parameters
         ----------
@@ -144,32 +137,29 @@ class GPModeler(object):
         return samples
 
 
-class CustomTerm(celerite.terms.Term):
-    """
-    Custom sum of exponentials kernel designed for `FastGPModeler`
-    """
-    parameter_names = ("log_B", "log_C", "log_L", "log_P")
-
-    def get_real_coefficients(self, params):
-        log_B, log_C, log_L, log_P = params
-        a = np.exp(log_B)
-        b = np.exp(log_C)
-        c = np.exp(-log_L)
-        return a * (1.0 + b) / (2.0 + b), c
-
-    def get_complex_coefficients(self, params):
-        log_B, log_C, log_L, log_P = params
-        a = np.exp(log_B)
-        b = np.exp(log_C)
-        c = np.exp(-log_L)
-        return a / (2.0 + b), 0.0, c, 2 * np.pi * np.exp(-log_P)
-
-
 class FastGPModeler(GPModeler):
-    """
-    GP Model based on a sum of exponentials kernel (fast but not so strong)
-    """
+    """GP Model based on a sum of exponentials kernel (fast but not so strong)"""
     def __init__(self, t, x, log_sigma=-17, log_B=-13, log_C=0, log_L=3, log_P=2, bounds=None, std=None):
+        import celerite
+
+        class CustomTerm(celerite.terms.Term):
+            """Custom sum of exponentials kernel"""
+            parameter_names = ("log_B", "log_C", "log_L", "log_P")
+
+            def get_real_coefficients(self, params):
+                log_B, log_C, log_L, log_P = params
+                a = np.exp(log_B)
+                b = np.exp(log_C)
+                c = np.exp(-log_L)
+                return a * (1.0 + b) / (2.0 + b), c
+
+            def get_complex_coefficients(self, params):
+                log_B, log_C, log_L, log_P = params
+                a = np.exp(log_B)
+                b = np.exp(log_C)
+                c = np.exp(-log_L)
+                return a / (2.0 + b), 0.0, c, 2 * np.pi * np.exp(-log_P)
+
         super(FastGPModeler, self).__init__(t, x)
         self.mean = (log_sigma, log_B, log_C, log_L)
         if bounds is None:
@@ -189,10 +179,10 @@ class FastGPModeler(GPModeler):
 
 
 class StrongGPModeler(GPModeler):
-    """
-    GP Model based on Quasi-Periodic kernel (strong but not so fast)
-    """
+    """GP Model based on Quasi-Periodic kernel (strong but not so fast)"""
     def __init__(self, t, x, log_sigma=-17, log_A=-13, log_L=5, log_G=1.9, log_P=2, bounds=None, std=None):
+        import george
+
         super(StrongGPModeler, self).__init__(t, x)
         self.mean = (log_sigma, log_A, log_L, log_G)
         if bounds is None:
@@ -212,70 +202,56 @@ class StrongGPModeler(GPModeler):
         return -self.gp.grad_log_likelihood(x)
 
 
-def acf_harmonic_quality(t, x, pmin=None, periods=None):
-    """
-    Calculates the quality of the ACF of a band-pass filtered version of the signal
+class TensorGPModeler(GPModeler):
+    """GP Model using symbolic computing from PyMC3 and Theano for optimization and enabling GPUs"""
+    def __init__(self, t, x, sigma=4e-8, A=2e-6, L=150, inv_G=-0.6, P=7.5):
+        import pymc3 as pm
+        import theano.tensor as tt
 
-    t: array-like
-        time array
-    x: array-like
-        signal array
-    pmin: float (optional)
-        lower cutoff period to filter signal
-    periods: list (optional)
-        list of higher cutoff periods to filter signal
+        super(TensorGPModeler, self).__init__(t, x)
+        sigma = pm.Lognormal(mu=sigma, sd=5.0)
+        A = pm.Lognormal(mu=A, sd=5.7)
+        L = pm.Lognormal(mu=L, sd=1.2)
+        inv_G = pm.Lognormal(mu=inv_G, sd=0.7)
+        # P =
 
-    Returns
-    -------
-    ps: list
-        highest peaks (best periods) for each filtered version
-    hs: list
-        maximum heights for each filtered version
-    qs: list
-        quality factor of each best period
-    """
-    if periods is None:
-        periods = 2 ** np.arange(8)
-    fs = 1 / np.median(np.diff(t))
-    if pmin is None:
-        pmin = max(np.min(periods) / 10, 2 / fs)
-    t -= np.min(t)
-    periods = np.array([pi for pi in periods if pmin < pi < np.max(t) / 2])
-    ps = []
-    hs = []
-    qs = []
-    for pi in periods:
-        xf = filt(x, 1/pi, 1/pmin, fs)
-        ml = np.where(t >= 2*pi)[0][0]
-        R = acf(xf, maxlag=ml)
-        if pi >= 20:
-            R = smooth(R, Box1DKernel(width=pi//10))
-        try:
-            peaks, heights = find_peaks(R, t[:ml])
-        except IndexError:
-            continue
-        bp_acf = t[peaks][np.argmax(heights)]
-        ps.append(bp_acf)
-        hs.append(np.max(heights))
-        tau_max = 20 * pi / bp_acf
+        cov = A * pm.gp.cov.ExpQuad(1, L) * pm.gp.cov.Periodic(1, P, inv_G)
 
-        def eps(params, lags, r):
-            acf_model = params[0] * np.exp(-lags / params[1]) * np.cos(2 * np.pi * lags / bp_acf)
-            if params[1] > tau_max:
-                return np.ones_like(r) * 1000
-            return np.square(r - acf_model)
+        self.gp = pm.gp.Marginal(cov_func=cov)
+        raise NotImplementedError
 
-        results = least_squares(fun=eps, x0=[1, 1], loss='soft_l1', f_scale=0.1, args=(t[:ml], R))
-        A, tau = results.x
-        ri = eps(results.x, t[:ml], R).sum()
-        qs.append((tau / ps[-1]) * (ml * hs[-1] / ri))
 
-    return ps, hs, qs
+    def lnlike(self, p):
+        pass
+
+    def lnprior(self, p):
+        pass
+
+    def sample_prior(self, N):
+        pass
+
+    def sample_period(self, N):
+        pass
+
+    def lnprob(self, p):
+        pass
+
+    def nll(self, p, x):
+        pass
+
+    def grad_nll(self, p, x):
+        pass
+
+    def minimize(self):
+        pass
+
+    def mcmc(self, nwalkers=50, nsteps=1000, burn=0, useprior=False):
+        pass
 
 
 def make_gaussian_prior(t, x, pmin=None, periods=None):
-    """
-    Generates a weighted sum of Gaussians as a probability prior on the signal period
+    """Generates a weighted sum of Gaussians as a probability prior on the signal period
+
     Based on Angus et al. (2018) MNRAS 474, 2094A
 
     Parameters
@@ -291,7 +267,7 @@ def make_gaussian_prior(t, x, pmin=None, periods=None):
 
     Returns
     -------
-    gaussian_prior: callable
+    gaussian_prior: function
         prior on logP
     """
     ps, hs, qs = acf_harmonic_quality(t, x, pmin, periods)
