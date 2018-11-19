@@ -6,3 +6,4 @@ tqdm
 george
 celerite
 autograd
+pymc3
