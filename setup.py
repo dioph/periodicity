@@ -15,7 +15,7 @@ setuptools.setup(
     url="https://github.com/dioph/periodicity",
     packages=setuptools.find_packages(),
     install_requires=['numpy>=1.11', 'astropy>=1.3', 'scipy>=0.19.0',
-                      'emcee', 'tqdm', 'george', 'celerite', 'autograd'],
+                      'emcee', 'tqdm', 'autograd'],
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
