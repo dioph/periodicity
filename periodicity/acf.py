@@ -1,10 +1,11 @@
 import numpy as np
 from scipy import signal
+from scipy.optimize import least_squares
+from astropy.convolution import Box1DKernel
 
 
 def acf(y, t=None, maxlag=None, s=0, fill_gaps=False):
-    """
-    Auto-Correlation Function implemented using IFFT of the power spectrum.
+    """Auto-Correlation Function implemented using IFFT of the power spectrum.
 
     Parameters
     ----------
@@ -40,8 +41,7 @@ def acf(y, t=None, maxlag=None, s=0, fill_gaps=False):
 
 
 def find_peaks(R, lags):
-    """
-    Finds ACF maxima and the corresponding peak heights
+    """Finds ACF maxima and the corresponding peak heights
 
     Parameters
     ----------
@@ -67,8 +67,7 @@ def find_peaks(R, lags):
 
 
 def gaussian(m, s):
-    """
-    Simple 1D Gaussian function generator
+    """Simple 1D Gaussian function generator
 
     Parameters
     ----------
@@ -89,8 +88,7 @@ def gaussian(m, s):
 
 
 def smooth(y, kernel):
-    """
-    Wrap to numpy.convolve
+    """Wrap to numpy.convolve
 
     Parameters
     ----------
@@ -109,8 +107,7 @@ def smooth(y, kernel):
 
 
 def filt(x, lo, hi, fs, order=5):
-    """
-    Implements a band-pass IIR butterworth filter
+    """Implements a band-pass IIR butterworth filter
 
     Parameters
     ----------
@@ -136,3 +133,63 @@ def filt(x, lo, hi, fs, order=5):
     b, a = signal.butter(N=order, Wn=[lo, hi], btype='band')
     xf = signal.filtfilt(b, a, x)
     return xf
+
+
+def acf_harmonic_quality(t, x, pmin=None, periods=None):
+    """Calculates the quality of the ACF of a band-pass filtered version of the signal
+
+    t: array-like
+        time array
+    x: array-like
+        signal array
+    pmin: float (optional)
+        lower cutoff period to filter signal
+    periods: list (optional)
+        list of higher cutoff periods to filter signal
+
+    Returns
+    -------
+    ps: list
+        highest peaks (best periods) for each filtered version
+    hs: list
+        maximum heights for each filtered version
+    qs: list
+        quality factor of each best period
+    """
+    if periods is None:
+        periods = 2 ** np.arange(8)
+    fs = 1 / np.median(np.diff(t))
+    if pmin is None:
+        pmin = max(np.min(periods) / 10, 2 / fs)
+    t -= np.min(t)
+    periods = np.array([pi for pi in periods if pmin < pi < np.max(t) / 2])
+    ps = []
+    hs = []
+    qs = []
+    for pi in periods:
+        xf = filt(x, 1/pi, 1/pmin, fs)
+        ml = np.where(t >= 2*pi)[0][0]
+        R = acf(xf, maxlag=ml)
+        if pi >= 20:
+            R = smooth(R, Box1DKernel(width=pi//10))
+        try:
+            peaks, heights = find_peaks(R, t[:ml])
+        except IndexError:
+            continue
+        bp_acf = t[peaks][np.argmax(heights)]
+        ps.append(bp_acf)
+        hs.append(np.max(heights))
+        tau_max = 20 * pi / bp_acf
+
+        def eps(params, lags, r):
+            acf_model = params[0] * np.exp(-lags / params[1]) * np.cos(2 * np.pi * lags / bp_acf)
+            if params[1] > tau_max:
+                return np.ones_like(r) * 1000
+            return np.square(r - acf_model)
+
+        results = least_squares(fun=eps, x0=[1, 1], loss='soft_l1', f_scale=0.1, args=(t[:ml], R))
+        A, tau = results.x
+        ri = eps(results.x, t[:ml], R).sum()
+        qs.append((tau / ps[-1]) * (ml * hs[-1] / ri))
+
+    return ps, hs, qs
