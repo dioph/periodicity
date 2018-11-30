@@ -11,33 +11,63 @@ def acf(y, t=None, maxlag=None, s=0, fill_gaps=False):
     ----------
     y: array-like
         discrete input signal
+    t: array-like (optional)
+        time array
     maxlag: int (optional)
         maximum lag to compute ACF
     s: int (optional)
         standard deviation of Gaussian filter used to smooth ACF, measured in samples
-
+    fill_gaps: bool (optional default=False)
+        whether to use linear interpolation to sample signal uniformly
     Returns
+    lags: array-like
+        array of lags
     -------
     R: array-like
         ACF of input signal
     """
-    N = len(y)
     if t is None:
-        t = np.arange(N)
-    if maxlag is None:
-        maxlag = N
+        t = np.arange(len(y))
+
     if fill_gaps:
         T = float(np.median(np.diff(t)))
         gaps = np.where(np.diff(t) > 1.5 * T)[0]
-        # TODO: fill gaps with linear interpolation
+        t_gaps = []
+        y_gaps = []
+        for g in gaps:
+            t0, t1 = t[g:g + 2]
+            y0, y1 = y[g:g + 2]
+            tfill = np.arange(t0 + T, t1, T)
+            t_gaps.append(tfill)
+            y_gaps.append(y0 + (tfill - t0) * (y1 - y0) / (t1 - t0))
+        ids = []
+        shift = 1
+        for i, tg, yg in zip(gaps, t_gaps, y_gaps):
+            idx = i + shift
+            t = np.insert(t, idx, tg)
+            y = np.insert(y, idx, yg)
+            n = len(tg)
+            ids.append(np.arange(idx, idx + n))
+            shift += n
+        t = np.arange(t.size) * T + t[0]
+
+    N = len(y)
+
+    if maxlag is None:
+        maxlag = N
+
     f = np.fft.fft(y - y.mean(), n=2 * N)
     R = np.fft.ifft(f * np.conjugate(f))[:maxlag].real
+
     if s > 0:
-        h = gaussian(m=0, s=s)
-        h = h(np.arange(-(3 * s - 1), 3 * s, 1.))
+        kernel = gaussian(mu=0, sd=s)
+        h = kernel(np.arange(-(3 * s - 1), 3 * s, 1.))
         R = smooth(R, kernel=h)
+
     R /= R[0]
-    return R
+    lags = t[:maxlag] - np.min(t[:maxlag])
+
+    return lags, R
 
 
 def find_peaks(R, lags):
@@ -66,14 +96,14 @@ def find_peaks(R, lags):
     return peaks, heights
 
 
-def gaussian(m, s):
+def gaussian(mu, sd):
     """Simple 1D Gaussian function generator
 
     Parameters
     ----------
-    m: float
+    mu: float
         mean
-    s: float
+    sd: float
         standard deviation
 
     Returns
@@ -82,7 +112,7 @@ def gaussian(m, s):
         1D Gaussian with given parameters
     """
     def f(x):
-        return 1 / (np.sqrt(2 * np.pi) * s) * np.exp(-.5 * ((x - m) / s) ** 2)
+        return 1 / (np.sqrt(2 * np.pi) * sd) * np.exp(-.5 * ((x - mu) / sd) ** 2)
 
     return f
 
@@ -169,7 +199,7 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None):
     for pi in periods:
         xf = filt(x, 1/pi, 1/pmin, fs)
         ml = np.where(t >= 2*pi)[0][0]
-        R = acf(xf, maxlag=ml)
+        lags, R = acf(xf, maxlag=ml)
         if pi >= 20:
             R = smooth(R, Box1DKernel(width=pi//10))
         try:
