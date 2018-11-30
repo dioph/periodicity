@@ -3,8 +3,7 @@ from astropy.stats import LombScargle
 
 
 def lombscargle(t, x, f0=0, fmax=None, n=5, fap_method=None, fap_level=None):
-    """
-    Computes the generalized Lomb-Scargle periodogram of a discrete signal x(t)
+    """Computes the generalized Lomb-Scargle periodogram of a discrete signal x(t)
 
     Parameters
     ----------
@@ -50,8 +49,7 @@ def lombscargle(t, x, f0=0, fmax=None, n=5, fap_method=None, fap_level=None):
 
 
 def window(t, n=5):
-    """
-    Computes the periodogram of the window function
+    """Computes the periodogram of the window function
 
     Parameters
     ----------
@@ -67,3 +65,9 @@ def window(t, n=5):
     ls = LombScargle(t, 1, fit_mean=False, center_data=False)
     f, a = ls.autopower(minimum_frequency=0, samples_per_peak=n)
     return f, a
+
+
+def wavelet(t, x):
+    pass
+
+# TODO: check out Supersmoother (Reimann 1994)

@@ -5,7 +5,7 @@ Useful tools for analysis of periodicities in time series data.
 Includes:
 * Auto-Correlation Function
 * Fourier methods:
-    * Lomb-Scargle
+    * Lomb-Scargle periodogram
     * Wavelet Transform (in progress)
 * Phase-folding methods:
     * String Length
@@ -38,7 +38,7 @@ samples = model.mcmc(nwalkers=32, nsteps=5000, burn=500)
 print('Median period: {:.2f}'.format(np.exp(np.median(samples[:, 4]))))
 ```
 
-Visualization of this example:
+### Visualization of this example:
 
 ![gp_example](https://github.com/dioph/periodicity/blob/master/figures/example2.png?raw=True)
 
