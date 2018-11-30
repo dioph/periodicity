@@ -10,12 +10,12 @@ from .acf import gaussian, acf_harmonic_quality
 class GPModeler(object):
     """Abstract class implementing common functions for a GP Model"""
     def __init__(self, t, x):
-        self.t = t
-        self.x = x
+        self.t = np.array(t, float)
+        self.x = np.array(x, float)
 
-        def uniform_prior(logP):
-            window = np.logical_and(self.bounds['log_P'][0] < logP, logP < self.bounds['log_P'][1])
-            probs = np.ones_like(logP)
+        def uniform_prior(logp):
+            window = np.logical_and(self.bounds['log_P'][0] < logp, logp < self.bounds['log_P'][1])
+            probs = np.ones_like(logp)
             probs[~window] = 0.0
             return probs
 
@@ -24,9 +24,9 @@ class GPModeler(object):
 
         self.prior = uniform_prior
         self.gp = None
-        self.mean = ()
+        self.mu = ()
         self.bounds = dict()
-        self.std = ()
+        self.sd = ()
 
     def lnlike(self, p):
         self.gp.set_parameter_vector(p)
@@ -35,7 +35,7 @@ class GPModeler(object):
         return ll
 
     def lnprior(self, p):
-        priors = np.append([gaussian(self.mean[i], self.std[i]) for i in range(len(self.mean))], [self.prior])
+        priors = np.append([gaussian(self.mu[i], self.sd[i]) for i in range(len(self.mu))], [self.prior])
         for i, (lo, hi) in enumerate(self.bounds.values()):
             if not(lo < p[i] < hi):
                 return -np.inf
@@ -50,7 +50,7 @@ class GPModeler(object):
         while nbad > 0:
             r = np.random.randn(N * (ndim - 1)).reshape((N, ndim - 1))
             for i in range(ndim - 1):
-                samples[m, i] = r[m, i] * self.std[i] + self.mean[i]
+                samples[m, i] = r[m, i] * self.sd[i] + self.mu[i]
             samples[m, -1] = self.sample_period(nbad)
             lp = np.array([self.lnprior(p) for p in samples])
             m = ~np.isfinite(lp)
@@ -88,7 +88,7 @@ class GPModeler(object):
             5000 uniform time samples within modeler time array
         mu: array-like
             predicted mean function with maximum likelihood hyperparameters
-        std: array-like
+        sd: array-like
             predicted error at each sample with maximum likelihood hyperparameters
         v: list
             maximum likelihood hyperparameters
@@ -102,8 +102,8 @@ class GPModeler(object):
         self.gp.compute(self.t)
         t = np.linspace(self.t.min(), self.t.max(), 5000)
         mu, var = self.gp.predict(self.x, self.t, return_var=True)
-        std = np.sqrt(var)
-        return t, mu, std, results.x
+        sd = np.sqrt(var)
+        return t, mu, sd, results.x
 
     def mcmc(self, nwalkers=50, nsteps=1000, burn=0, useprior=False):
         """Samples the posterior probability distribution with a Markov Chain Monte Carlo simulation
@@ -139,7 +139,7 @@ class GPModeler(object):
 
 class FastGPModeler(GPModeler):
     """GP Model based on a sum of exponentials kernel (fast but not so strong)"""
-    def __init__(self, t, x, log_sigma=-17, log_B=-13, log_C=0, log_L=3, log_P=2, bounds=None, std=None):
+    def __init__(self, t, x, log_sigma=-17, log_B=-13, log_C=0, log_L=3, log_P=2, bounds=None, sd=None):
         import celerite
 
         class CustomTerm(celerite.terms.Term):
@@ -161,14 +161,14 @@ class FastGPModeler(GPModeler):
                 return a / (2.0 + b), 0.0, c, 2 * np.pi * np.exp(-log_P)
 
         super(FastGPModeler, self).__init__(t, x)
-        self.mean = (log_sigma, log_B, log_C, log_L)
+        self.mu = (log_sigma, log_B, log_C, log_L)
         if bounds is None:
             bounds = {'log_sigma': (-20, 0), 'log_B': (-20, 0), 'log_C': (-5, 5),
                       'log_L': (1.5, 5.0), 'log_P': (-0.69, 4.61)}
         self.bounds = bounds
-        if std is None:
-            std = (5.0, 5.7, 2.0, 0.7)
-        self.std = std
+        if sd is None:
+            sd = (5.0, 5.7, 2.0, 0.7)
+        self.sd = sd
         term = celerite.terms.JitterTerm(log_sigma=log_sigma)
         term += CustomTerm(log_B=log_B, log_C=log_C, log_L=log_L, log_P=log_P, bounds=bounds)
         self.gp = celerite.GP(term)
@@ -180,18 +180,18 @@ class FastGPModeler(GPModeler):
 
 class StrongGPModeler(GPModeler):
     """GP Model based on Quasi-Periodic kernel (strong but not so fast)"""
-    def __init__(self, t, x, log_sigma=-17, log_A=-13, log_L=5, log_G=1.9, log_P=2, bounds=None, std=None):
+    def __init__(self, t, x, log_sigma=-17, log_A=-13, log_L=5, log_G=1.9, log_P=2, bounds=None, sd=None):
         import george
 
         super(StrongGPModeler, self).__init__(t, x)
-        self.mean = (log_sigma, log_A, log_L, log_G)
+        self.mu = (log_sigma, log_A, log_L, log_G)
         if bounds is None:
             bounds = {'log_sigma': (-20, 0), 'log_A': (-20, 0), 'log_L': (2, 8),
                       'log_G': (0, 3), 'log_P': (-0.69, 4.61)}
         self.bounds = bounds
-        if std is None:
-            std = (5.0, 5.7, 1.2, 1.4)
-        self.std = std
+        if sd is None:
+            sd = (5.0, 5.7, 1.2, 1.4)
+        self.sd = sd
         kernel = george.kernels.ConstantKernel(log_A, bounds=[bounds['log_A']])
         kernel *= george.kernels.ExpSquaredKernel(np.exp(log_L), metric_bounds=[bounds['log_L']])
         kernel *= george.kernels.ExpSine2Kernel(log_G, log_P, bounds=[bounds['log_G'], bounds['log_P']])
@@ -218,6 +218,7 @@ class TensorGPModeler(GPModeler):
         cov = A * pm.gp.cov.ExpQuad(1, L) * pm.gp.cov.Periodic(1, P, inv_G)
 
         self.gp = pm.gp.Marginal(cov_func=cov)
+
         raise NotImplementedError
 
 
