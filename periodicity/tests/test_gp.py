@@ -5,9 +5,16 @@ lightcurve1 = ascii.read('periodicity/tests/data/lightcurve1.csv')
 lightcurve2 = ascii.read('periodicity/tests/data/lightcurve2.csv')
 
 
-def test_file_format():
-    assert lightcurve1['time'].size == 2145
+def test_file_format_lightcurve1():
+    assert lightcurve1.colnames == ['time', 'flux', 'flux_err']
     assert lightcurve1['flux'].size == lightcurve1['time'].size
+    assert lightcurve1['time'].size == 2145
+
+
+def test_file_format_lightcurve2():
+    assert lightcurve2.colnames == ['time', 'flux', 'flux_err']
+    assert lightcurve2['flux'].size == lightcurve2['time'].size
+    assert lightcurve2['time'].size == 2148
 
 
 def test_make_gaussian_prior():
@@ -19,7 +26,7 @@ def test_make_gaussian_prior():
     assert len(peaks) == 3
 
 
-def test_class_creation():
+def test_class_constructor():
     model = gp.FastGPModeler([1, 2], [3, 4])
     assert model.mu == (-17, -13, 0, 3)
 
