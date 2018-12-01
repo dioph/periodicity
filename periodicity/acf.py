@@ -4,7 +4,7 @@ from scipy.optimize import least_squares
 from astropy.convolution import Box1DKernel
 
 
-def acf(y, t=None, maxlag=None, s=0, fill_gaps=False):
+def acf(y, t=None, maxlag=None, s=0, fill=False):
     """Auto-Correlation Function implemented using IFFT of the power spectrum.
 
     Parameters
@@ -17,39 +17,21 @@ def acf(y, t=None, maxlag=None, s=0, fill_gaps=False):
         maximum lag to compute ACF
     s: int (optional)
         standard deviation of Gaussian filter used to smooth ACF, measured in samples
-    fill_gaps: bool (optional default=False)
+    fill: bool (optional default=False)
         whether to use linear interpolation to sample signal uniformly
+
     Returns
+    -------
     lags: array-like
         array of lags
-    -------
     R: array-like
         ACF of input signal
     """
     if t is None:
         t = np.arange(len(y))
 
-    if fill_gaps:
-        T = float(np.median(np.diff(t)))
-        gaps = np.where(np.diff(t) > 1.5 * T)[0]
-        t_gaps = []
-        y_gaps = []
-        for g in gaps:
-            t0, t1 = t[g:g + 2]
-            y0, y1 = y[g:g + 2]
-            tfill = np.arange(t0 + T, t1, T)
-            t_gaps.append(tfill)
-            y_gaps.append(y0 + (tfill - t0) * (y1 - y0) / (t1 - t0))
-        ids = []
-        shift = 1
-        for i, tg, yg in zip(gaps, t_gaps, y_gaps):
-            idx = i + shift
-            t = np.insert(t, idx, tg)
-            y = np.insert(y, idx, yg)
-            n = len(tg)
-            ids.append(np.arange(idx, idx + n))
-            shift += n
-        t = np.arange(t.size) * T + t[0]
+    if fill:
+        t, y = fill_gaps(t, y)
 
     N = len(y)
 
@@ -68,6 +50,48 @@ def acf(y, t=None, maxlag=None, s=0, fill_gaps=False):
     lags = t[:maxlag] - np.min(t[:maxlag])
 
     return lags, R
+
+
+def fill_gaps(t, y):
+    """Linear interpolation to create a uniformly sampled signal
+
+    Parameters
+    ----------
+    t: array-like
+        time array
+    y: array-like
+        signal array
+
+    Returns
+    -------
+    tnew: array-like
+        new sampling times uniformly spaced
+    ynew: array-like
+        signal with gaps filled by linear interpolation
+    """
+    T = float(np.median(np.diff(t)))
+    gaps = np.where(np.diff(t) > 1.5 * T)[0]
+    t_gaps = []
+    y_gaps = []
+    tnew = t
+    ynew = y
+    for g in gaps:
+        t0, t1 = tnew[g:g + 2]
+        y0, y1 = ynew[g:g + 2]
+        tfill = np.arange(t0 + T, t1, T)
+        t_gaps.append(tfill)
+        y_gaps.append(y0 + (tfill - t0) * (y1 - y0) / (t1 - t0))
+    ids = []
+    shift = 1
+    for i, tg, yg in zip(gaps, t_gaps, y_gaps):
+        idx = i + shift
+        tnew = np.insert(tnew, idx, tg)
+        ynew = np.insert(ynew, idx, yg)
+        n = len(tg)
+        ids.append(np.arange(idx, idx + n))
+        shift += n
+    tnew = np.arange(tnew.size) * T + tnew[0]
+    return tnew, ynew
 
 
 def find_peaks(R, lags):
@@ -176,6 +200,7 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None):
         lower cutoff period to filter signal
     periods: list (optional)
         list of higher cutoff periods to filter signal
+        Will only consider periods between `pmin` and half the baseline
 
     Returns
     -------
@@ -188,7 +213,7 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None):
     """
     if periods is None:
         periods = 2 ** np.arange(8)
-    fs = 1 / np.median(np.diff(t))
+    fs = 1 / float(np.median(np.diff(t)))
     if pmin is None:
         pmin = max(np.min(periods) / 10, 2 / fs)
     t -= np.min(t)
@@ -199,7 +224,7 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None):
     for pi in periods:
         xf = filt(x, 1/pi, 1/pmin, fs)
         ml = np.where(t >= 2*pi)[0][0]
-        lags, R = acf(xf, maxlag=ml)
+        t, R = acf(xf, t, maxlag=ml)
         if pi >= 20:
             R = smooth(R, Box1DKernel(width=pi//10))
         try:
