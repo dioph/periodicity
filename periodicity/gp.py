@@ -126,6 +126,7 @@ class GPModeler(object):
         """
         ndim = len(self.gp)
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob)
+        # TODO: figure out a way to optimize time complexity by parallel computing
         p = self.gp.get_parameter_vector()
         if useprior:
             p0 = self.sample_prior(nwalkers)
@@ -206,21 +207,11 @@ class TensorGPModeler(GPModeler):
     """GP Model using symbolic computing from PyMC3 and Theano for optimization and enabling GPUs"""
     def __init__(self, t, x, sigma=4e-8, A=2e-6, L=150, inv_G=-0.6, P=7.5):
         import pymc3 as pm
-        import theano.tensor as tt
 
         super(TensorGPModeler, self).__init__(t, x)
-        sigma = pm.Lognormal(mu=sigma, sd=5.0)
-        A = pm.Lognormal(mu=A, sd=5.7)
-        L = pm.Lognormal(mu=L, sd=1.2)
-        inv_G = pm.Lognormal(mu=inv_G, sd=0.7)
-        # P =
-
         cov = A * pm.gp.cov.ExpQuad(1, L) * pm.gp.cov.Periodic(1, P, inv_G)
 
-        self.gp = pm.gp.Marginal(cov_func=cov)
-
         raise NotImplementedError
-
 
     def lnlike(self, p):
         pass
@@ -273,14 +264,14 @@ def make_gaussian_prior(t, x, pmin=None, periods=None):
     """
     ps, hs, qs = acf_harmonic_quality(t, x, pmin, periods)
 
-    def gaussian_prior(logP):
+    def gaussian_prior(logp):
         tot = 0
         for pi, qi in zip(ps, qs):
             qi = max(qi, 0)
             gaussian1 = gaussian(np.log(pi), .2)
             gaussian2 = gaussian(np.log(pi / 2), .2)
             gaussian3 = gaussian(np.log(2 * pi), .2)
-            tot += qi * (.9 * gaussian1(logP) + .05 * gaussian2(logP) + .05 * gaussian3(logP))
+            tot += qi * (.9 * gaussian1(logp) + .05 * gaussian2(logp) + .05 * gaussian3(logp))
         tot /= np.sum(qs)
         return tot
 

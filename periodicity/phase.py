@@ -1,10 +1,3 @@
-# implements phase-folding methods such as:
-# - string length (Dworetsky 1983)
-# - analysis of variance (Schwarzenberg-Czerny 1989)
-# - phase dispersion minimization (Stellingwerf 1978)
-# - Gregory-Loredo method (Gregory & Loredo 1992)
-# - conditional entropy method (Graham et al. 2013)
-
 import numpy as np
 
 
@@ -13,25 +6,25 @@ def stringlength(t, x, dphi=0.1, n_periods=1000):
 
     Parameters
     ----------
-    t:
-
-    x:
-
+    t: array-like
+        time array
+    x: array-like
+        signal array
     dphi: float (optional default=0.1)
-
+        factor to multiply (1 / baseline) in order to get frequency separation
     n_periods: int (optional default=1000)
-
+        number of period samples to test
     Returns
     -------
-    periods:
-
-    L:
-
+    periods: array-like
+        periods tested
+    L: array-like
+        string length for each period
     """
     # scale x to range from -0.25 to +0.25
-    x = (x - x.min()) / (2 * (x.max() - x.min())) - 0.25
+    x = (x - np.max(x)) / (2 * (np.max(x) - np.min(x))) - 0.25
     df = dphi / (np.max(t) - np.min(t))
-    periods = 1 / np.arange(df, n_periods*df+df, df)
+    periods = 1 / np.linspace(df, n_periods*df, n_periods)
     periods.sort()
     L = []
     for period in periods:
@@ -39,7 +32,7 @@ def stringlength(t, x, dphi=0.1, n_periods=1000):
         sorted_args = np.argsort(phi)
         phi = phi[sorted_args]
         m = x[sorted_args]
-        ll = np.sqrt(np.square(np.append(m[1:], m[0])-m) + np.square(np.append(phi[1:], phi[0])-phi)).sum()
+        ll = np.hypot(np.roll(m, -1) - m, np.roll(phi, -1) - phi).sum()
         L.append(ll)
     # TODO: consider flagging false periods for rejection
     L = np.array(L)

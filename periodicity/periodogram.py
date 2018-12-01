@@ -11,12 +11,16 @@ def lombscargle(t, x, f0=0, fmax=None, n=5, fap_method=None, fap_level=None):
         time array
     x: array-like
         signal array
-    f: array-like (optional)
-        frequency array
+    f0: float (optional default=0)
+        minimum frequency
+    fmax: float (optional)
+        maximum frequency
+        If None is given, defaults to the pseudo-Nyquist limit
     n: float (optional default=5)
         samples per peak
-    fap_method: string (optional)
+    fap_method: string {None, 'baluev', 'bootstrap'}
         the approximation method to use for highest peak FAP and false alarm levels
+        None by default
     fap_level: array-like (optional)
         false alarm probabilities to approximate heights
 
@@ -55,6 +59,8 @@ def window(t, n=5):
     ----------
     t: array-like
         times of sampling comb window
+    n: float (optional default=5)
+        samples per peak
     Returns
     -------
     f: array-like
