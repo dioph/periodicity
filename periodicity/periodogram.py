@@ -46,7 +46,8 @@ def lombscargle(t, x, f0=0, fmax=None, n=5, fap_method=None, fap_level=None):
         fap = ls.false_alarm_probability(a.max(), method=fap_method, minimum_frequency=f0,
                                          maximum_frequency=fmax, samples_per_peak=n)
         if fap_level is not None:
-            fal = ls.false_alarm_level(fap_level, method=fap_method)
+            fal = ls.false_alarm_level(fap_level, method=fap_method, minimum_frequency=f0,
+                                       maximum_frequency=fmax, samples_per_peak=n)
             return f, a, fap, fal
         return f, a, fap
     return f, a
@@ -74,6 +75,7 @@ def window(t, n=5):
 
 
 def wavelet(t, x):
+    raise NotImplementedError
     pass
 
 # TODO: check out Supersmoother (Reimann 1994)
