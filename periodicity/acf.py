@@ -15,6 +15,7 @@ def acf(y, t=None, maxlag=None, s=0, fill=False):
         time array
     maxlag: int (optional)
         maximum lag to compute ACF
+        # TODO: turn maxlag into a measure of time if t is given
     s: int (optional)
         standard deviation of Gaussian filter used to smooth ACF, measured in samples
     fill: bool (optional default=False)
@@ -224,14 +225,14 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None):
     for pi in periods:
         xf = filt(x, 1/pi, 1/pmin, fs)
         ml = np.where(t >= 2*pi)[0][0]
-        t, R = acf(xf, t, maxlag=ml)
+        lgs, R = acf(xf, t, maxlag=ml)
         if pi >= 20:
             R = smooth(R, Box1DKernel(width=pi//10))
         try:
-            peaks, heights = find_peaks(R, t[:ml])
+            peaks, heights = find_peaks(R, lgs)
         except IndexError:
             continue
-        bp_acf = t[peaks][np.argmax(heights)]
+        bp_acf = lgs[peaks][np.argmax(heights)]
         ps.append(bp_acf)
         hs.append(np.max(heights))
         tau_max = 20 * pi / bp_acf
@@ -242,9 +243,9 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None):
                 return np.ones_like(r) * 1000
             return np.square(r - acf_model)
 
-        results = least_squares(fun=eps, x0=[1, 1], loss='soft_l1', f_scale=0.1, args=(t[:ml], R))
+        results = least_squares(fun=eps, x0=[1, 1], loss='soft_l1', f_scale=0.1, args=(lgs, R))
         A, tau = results.x
-        ri = eps(results.x, t[:ml], R).sum()
+        ri = eps(results.x, lgs, R).sum()
         qs.append((tau / ps[-1]) * (ml * hs[-1] / ri))
 
     return ps, hs, qs
