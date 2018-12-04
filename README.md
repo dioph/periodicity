@@ -16,8 +16,12 @@ Includes:
     * `pymc3` implementation (in progress)
 
 ## Quick start
+### Installing current release from pypi (v0.1.0-alpha)
     $ pip install periodicity
-
+### Installing current development version
+    $ git clone https://github.com/dioph/periodicity.git
+    $ cd periodicity
+    $ python setup.py install
 ## Example using GP with astronomical data
 ```python
 from periodicity.gp import *
