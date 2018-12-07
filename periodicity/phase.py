@@ -1,7 +1,8 @@
 import numpy as np
+from .acf import gaussian, smooth
 
 
-def stringlength(t, x, dphi=0.1, n_periods=1000):
+def stringlength(t, x, dphi=0.1, n_periods=1000, s=0):
     """String Length
 
     Parameters
@@ -36,6 +37,10 @@ def stringlength(t, x, dphi=0.1, n_periods=1000):
         L.append(ll)
     # TODO: consider flagging false periods for rejection
     L = np.array(L)
+    if s > 0:
+        kernel = gaussian(mu=0, sd=s)
+        h = kernel(np.arange(-(3 * s - 1), 3 * s, 1.))
+        L = smooth(L, kernel=h)
     return periods, L
 
 # TODO: Analysis of Variance (Schwarzenberg-Czerny 1989)
