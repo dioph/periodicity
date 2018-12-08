@@ -2,7 +2,7 @@ from autograd import numpy as np
 import emcee
 from scipy.optimize import minimize
 from scipy.stats import linregress
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from .acf import gaussian, acf_harmonic_quality
 
