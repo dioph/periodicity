@@ -2,7 +2,7 @@ import numpy as np
 from astropy.stats import LombScargle
 
 
-def lombscargle(t, x, f0=0, fmax=None, n=5, fap_method=None, fap_level=None):
+def lombscargle(t, x, dx=None, f0=0, fmax=None, n=5, fap_method=None, fap_level=None):
     """Computes the generalized Lomb-Scargle periodogram of a discrete signal x(t)
 
     Parameters
@@ -11,6 +11,8 @@ def lombscargle(t, x, f0=0, fmax=None, n=5, fap_method=None, fap_level=None):
         time array
     x: array-like
         signal array
+    dx: array-like (optional)
+        measurement uncertainties for each sample
     f0: float (optional default=0)
         minimum frequency
     fmax: float (optional)
@@ -35,7 +37,7 @@ def lombscargle(t, x, f0=0, fmax=None, n=5, fap_method=None, fap_level=None):
     fal: float
         false alarm level for a given FAP
     """
-    ls = LombScargle(t, x)
+    ls = LombScargle(t, x, dy=dx)
     if fmax is None:
         T = float(np.median(np.diff(t)))
         fs = 1 / T

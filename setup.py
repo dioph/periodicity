@@ -5,7 +5,7 @@ with open("README.md", 'r') as f:
 
 setuptools.setup(
     name="periodicity",
-    version="0.1.0",
+    version="0.1.0b2",
     author="Eduardo Nunes",
     author_email="diofanto.nunes@gmail.com",
     license="MIT",
