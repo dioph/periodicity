@@ -9,6 +9,7 @@ Includes:
     * Wavelet Transform (in progress)
 * Phase-folding methods:
     * String Length
+    * Phase Dispersion Minimization
     * Analysis of Variance (in progress)
 * Gaussian Processes:
     * `george` implementation
