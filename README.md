@@ -35,7 +35,7 @@ t, x = lc.time, lc.flux
 x = x - x.mean()
 
 model = FastGPModeler(t, x)
-model.prior = make_gaussian_prior(t, x, pmin=2)
+model.prior = make_gaussian_prior(t, x)
 model.minimize()
 samples = model.mcmc(nwalkers=32, nsteps=5000, burn=500)
 

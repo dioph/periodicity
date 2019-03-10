@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import signal
-from scipy.optimize import least_squares
+from scipy.optimize import minimize
 from astropy.convolution import Box1DKernel
 
 
@@ -95,7 +95,7 @@ def fill_gaps(t, y):
     return tnew, ynew
 
 
-def find_peaks(R, lags):
+def find_peaks(R, lags, k=1):
     """Finds ACF maxima and the corresponding peak heights
 
     Parameters
@@ -104,6 +104,8 @@ def find_peaks(R, lags):
         ACF array
     lags: array-like
         time array
+    k: int (optional)
+        how many consecutive samples in each direction to use when searching for peaks/dips
 
     Returns
     -------
@@ -112,12 +114,17 @@ def find_peaks(R, lags):
     heights: array-like
         peak heights for each peak found
     """
-    peaks = np.array([i for i in range(1, len(lags) - 1) if R[i - 1] < R[i] and R[i + 1] < R[i]])
-    dips = np.array([i for i in range(1, len(lags) - 1) if R[i - 1] > R[i] and R[i + 1] > R[i]])
+    peaks = np.array([i for i in range(k, len(lags) - k) if np.all(np.diff(R[i - k:i+1]) > 0) and
+                      np.all(np.diff(R[i:i + k+1]) < 0)])
+    dips = np.array([i for i in range(k, len(lags) - k) if np.all(np.diff(R[i - k:i+1]) < 0) and
+                     np.all(np.diff(R[i:i + k+1]) > 0)])
+
     if lags[dips[0]] > lags[peaks[0]]:
         peaks = peaks[1:]
-    # TODO: Calculate actual peak heights
-    heights = R[peaks]
+    if lags[dips[-1]] > lags[peaks[-1]]:
+        dips = dips[:-1]
+
+    heights = R[peaks] - R[dips]
     return peaks, heights
 
 
@@ -190,7 +197,7 @@ def filt(x, lo, hi, fs, order=5):
     return xf
 
 
-def acf_harmonic_quality(t, x, pmin=None, periods=None):
+def acf_harmonic_quality(t, x, pmin=None, periods=None, a=1, b=2, n=8):
     """Calculates the quality of the ACF of a band-pass filtered version of the signal
 
     t: array-like
@@ -202,6 +209,10 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None):
     periods: list (optional)
         list of higher cutoff periods to filter signal
         Will only consider periods between `pmin` and half the baseline
+    a, b, n: floats (optional)
+        if `periods` is not given then it assumes the first `n` powers of `b` scaled by `a`:
+            periods = a * b ** np.arange(n)
+        defaults are a=1, b=2, n=8
 
     Returns
     -------
@@ -213,39 +224,38 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None):
         quality factor of each best period
     """
     if periods is None:
-        periods = 2 ** np.arange(8)
+        periods = a * b ** np.arange(n)
     fs = 1 / float(np.median(np.diff(t)))
     if pmin is None:
-        pmin = max(np.min(periods) / 10, 2 / fs)
+        pmin = max(np.min(periods) / 10, 3 / fs)
     t -= np.min(t)
     periods = np.array([pi for pi in periods if pmin < pi < np.max(t) / 2])
     ps = []
     hs = []
     qs = []
     for pi in periods:
-        xf = filt(x, 1/pi, 1/pmin, fs)
-        ml = np.where(t >= 2*pi)[0][0]
-        lgs, R = acf(xf, t, maxlag=ml)
+        xf = filt(x, 1 / pi, 1 / pmin, fs)
+        ml = np.where(t >= 2 * pi)[0][0]
+        lags, R = acf(xf, t, maxlag=ml)
         if pi >= 20:
-            R = smooth(R, Box1DKernel(width=pi//10))
+            R = smooth(R, Box1DKernel(width=pi // 10))
         try:
-            peaks, heights = find_peaks(R, lgs)
+            peaks, heights = find_peaks(R, lags)
         except IndexError:
             continue
-        bp_acf = lgs[peaks][np.argmax(heights)]
+        bp_acf = lags[peaks][np.argmax(heights)]
         ps.append(bp_acf)
         hs.append(np.max(heights))
         tau_max = 20 * pi / bp_acf
 
-        def eps(params, lags, r):
+        def eps(params):
             acf_model = params[0] * np.exp(-lags / params[1]) * np.cos(2 * np.pi * lags / bp_acf)
-            if params[1] > tau_max:
-                return np.ones_like(r) * 1000
-            return np.square(r - acf_model)
+            return np.sum(np.square(R - acf_model))
 
-        results = least_squares(fun=eps, x0=[1, 1], loss='soft_l1', f_scale=0.1, args=(lgs, R))
+        results = minimize(fun=eps, x0=np.array([1., bp_acf*2]))
         A, tau = results.x
-        ri = eps(results.x, lgs, R).sum()
-        qs.append((tau / ps[-1]) * (ml * hs[-1] / ri))
+        tau = min(tau, tau_max)
+        ri = eps(results.x)
+        qs.append((tau / bp_acf) * (ml * hs[-1] / ri))
 
     return ps, hs, qs

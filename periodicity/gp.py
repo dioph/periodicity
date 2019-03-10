@@ -241,7 +241,7 @@ class TensorGPModeler(GPModeler):
         pass
 
 
-def make_gaussian_prior(t, x, pmin=None, periods=None):
+def make_gaussian_prior(t, x, pmin=None, periods=None, a=1, b=2, n=8):
     """Generates a weighted sum of Gaussians as a probability prior on the signal period
 
     Based on Angus et al. (2018) MNRAS 474, 2094A
@@ -262,16 +262,16 @@ def make_gaussian_prior(t, x, pmin=None, periods=None):
     gaussian_prior: function
         prior on logP
     """
-    ps, hs, qs = acf_harmonic_quality(t, x, pmin, periods)
+    ps, hs, qs = acf_harmonic_quality(t, x, pmin, periods, a, b, n)
 
     def gaussian_prior(logp):
         tot = 0
         for pi, qi in zip(ps, qs):
             qi = max(qi, 0)
-            gaussian1 = gaussian(np.log(pi), .2)
-            gaussian2 = gaussian(np.log(pi / 2), .2)
-            gaussian3 = gaussian(np.log(2 * pi), .2)
-            tot += qi * (.9 * gaussian1(logp) + .05 * gaussian2(logp) + .05 * gaussian3(logp))
+            gaussian1 = gaussian(np.log(pi), .1)
+            gaussian2 = gaussian(np.log(pi / 2), .1)
+            gaussian3 = gaussian(np.log(2 * pi), .1)
+            tot += qi * (.8 * gaussian1(logp) + .1 * gaussian2(logp) + .1 * gaussian3(logp))
         tot /= np.sum(qs)
         return tot
 

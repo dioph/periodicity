@@ -1,6 +1,8 @@
 from .. import gp
 from astropy.io import ascii
 
+from .. import gp
+
 lightcurve1 = ascii.read('periodicity/tests/data/lightcurve1.csv')
 lightcurve2 = ascii.read('periodicity/tests/data/lightcurve2.csv')
 
@@ -17,13 +19,22 @@ def test_file_format_lightcurve2():
     assert lightcurve2['time'].size == 2148
 
 
-def test_make_gaussian_prior():
-    prior = gp.make_gaussian_prior(lightcurve1['time'], lightcurve1['flux'], pmin=2)
+def test_make_gaussian_prior1():
+    prior = gp.make_gaussian_prior(lightcurve1['time'], lightcurve1['flux'])
     logp = gp.np.linspace(-3, 5, 1000)
     probs = prior(logp)
-    assert probs.argmax() == 777
+    assert probs.argmax() == 775
     peaks = [i for i in range(1, len(logp) - 1) if probs[i - 1] < probs[i] and probs[i + 1] < probs[i]]
-    assert len(peaks) == 3
+    assert len(peaks) == 7
+
+
+def test_make_gaussian_prior2():
+    prior = gp.make_gaussian_prior(lightcurve2['time'], lightcurve2['flux'])
+    logp = gp.np.linspace(-3, 5, 1000)
+    probs = prior(logp)
+    assert probs.argmax() == 671
+    peaks = [i for i in range(1, len(logp) - 1) if probs[i - 1] < probs[i] and probs[i + 1] < probs[i]]
+    assert len(peaks) == 7
 
 
 def test_class_constructor():
