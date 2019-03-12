@@ -95,36 +95,71 @@ def fill_gaps(t, y):
     return tnew, ynew
 
 
-def find_peaks(R, lags, k=1):
-    """Finds ACF maxima and the corresponding peak heights
+def find_peaks(y, t=None, delta=0.):
+    """Finds function maxima and the corresponding peak heights
 
     Parameters
     ----------
-    R: array-like
-        ACF array
-    lags: array-like
+    y: array-like
+        signal array
+    t: array-like (optional)
         time array
-    k: int (optional)
-        how many consecutive samples in each direction to use when searching for peaks/dips
+        if not given will use indexes
+    delta: float (optional)
+        minimum difference between a peak and the following points before a peak may be considered a peak.
+        default: 0.0
+        recommended: delta >= RMSnoise * 5
 
     Returns
     -------
     peaks: array-like
-        mask with indices of peaks
+        [tmax, ymax] for each maximum found
     heights: array-like
-        peak heights for each peak found
+        average peak heights for each peak found
     """
-    peaks = np.array([i for i in range(k, len(lags) - k) if np.all(np.diff(R[i - k:i+1]) > 0) and
-                      np.all(np.diff(R[i:i + k+1]) < 0)])
-    dips = np.array([i for i in range(k, len(lags) - k) if np.all(np.diff(R[i - k:i+1]) < 0) and
-                     np.all(np.diff(R[i:i + k+1]) > 0)])
+    peaks = []
+    dips = []
+    if t is None:
+        t = np.arange(len(y))
+    y = np.asarray(y)
+    assert len(t) == len(y), "t and y must have same length"
 
-    if lags[dips[0]] > lags[peaks[0]]:
-        peaks = peaks[1:]
-    if lags[dips[-1]] > lags[peaks[-1]]:
-        dips = dips[:-1]
+    mn, mx = np.inf, -np.inf
+    mnpos, mxpos = np.nan, np.nan
+    lookformax = False
 
-    heights = R[peaks] - R[dips]
+    for i in range(len(y)):
+        if y[i] > mx:
+            mx = y[i]
+            mxpos = t[i]
+        if y[i] < mn:
+            mn = y[i]
+            mnpos = t[i]
+        if lookformax:
+            if y[i] < mx-delta:
+                peaks.append((mxpos, mx))
+                mn = y[i]
+                mnpos = t[i]
+                lookformax = False
+        else:
+            if y[i] > mn+delta and mn != -np.inf:
+                dips.append((mnpos, mn))
+                mx = y[i]
+                mxpos = t[i]
+                lookformax = True
+    peaks = np.array(peaks)
+    dips = np.array(dips)
+
+    heights = []
+    for i in range(len(peaks)):
+        h1 = peaks[i, 1] - dips[i, 1]
+        try:
+            h2 = peaks[i, 1] - dips[i+1, 1]
+            heights.append((h1+h2)/2)
+        except IndexError:
+            heights.append(h1)
+    heights = np.array(heights)
+
     return peaks, heights
 
 
@@ -243,7 +278,7 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None, a=1, b=2, n=8):
             peaks, heights = find_peaks(R, lags)
         except IndexError:
             continue
-        bp_acf = lags[peaks][np.argmax(heights)]
+        bp_acf = peaks[np.argmax(heights)][0]
         ps.append(bp_acf)
         hs.append(np.max(heights))
         tau_max = 20 * pi / bp_acf
