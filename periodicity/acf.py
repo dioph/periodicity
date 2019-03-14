@@ -160,6 +160,9 @@ def find_peaks(y, t=None, delta=0.):
             heights.append(h1)
     heights = np.array(heights)
 
+    if heights.size == 0 and delta > 1e-6:
+        return find_peaks(y=y, t=t, delta=delta/2)
+
     return peaks, heights
 
 

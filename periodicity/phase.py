@@ -95,8 +95,8 @@ def pdm(t, x, Nb=5, Nc=2, pmin=.01, pmax=10, n_periods=1000, s=0):
             mj.append(m[mask])
         sj = np.array([np.var(k, ddof=1) for k in mj])
         nj = np.array([k.size for k in mj])
-        s = np.sum((nj - 1) * sj)/(np.sum(nj) - M)
-        theta.append(s/sigma)
+        ss = np.sum((nj - 1) * sj)/(np.sum(nj) - M)
+        theta.append(ss/sigma)
     theta = np.array(theta)
     if s > 0:
         kernel = gaussian(mu=0, sd=s)
