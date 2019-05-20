@@ -241,7 +241,7 @@ class TensorGPModeler(GPModeler):
         pass
 
 
-def make_gaussian_prior(t, x, pmin=None, periods=None, a=1, b=2, n=8):
+def make_gaussian_prior(t, x, pmin=None, periods=None, a=1, b=2, n=8, fundamental_height=0.8, fundamental_width=0.1):
     """Generates a weighted sum of Gaussians as a probability prior on the signal period
 
     Based on Angus et al. (2018) MNRAS 474, 2094A
@@ -256,6 +256,17 @@ def make_gaussian_prior(t, x, pmin=None, periods=None, a=1, b=2, n=8):
         lower cutoff period to filter signal
     periods: list (optional)
         list of higher cutoff periods to filter signal
+    a, b, n: floats (optional)
+        if `periods` is not given then it assumes the first `n` powers of `b` scaled by `a`:
+            periods = a * b ** np.arange(n)
+        defaults are a=1, b=2, n=8
+    fundamental_height: float (optional)
+        weight of the gaussian mixture on the fundamental peak
+        the *2 and /2 harmonics get equal weights (1-fundamental_height)/2
+        default=0.8
+    fundamental_width: float (optional)
+        width of the gaussians in the prior
+        default=0.1
 
     Returns
     -------
@@ -266,12 +277,15 @@ def make_gaussian_prior(t, x, pmin=None, periods=None, a=1, b=2, n=8):
 
     def gaussian_prior(logp):
         tot = 0
+        fh = fundamental_height
+        hh = (1 - fh) / 2
+        fw = fundamental_width
         for pi, qi in zip(ps, qs):
             qi = max(qi, 0)
-            gaussian1 = gaussian(np.log(pi), .1)
-            gaussian2 = gaussian(np.log(pi / 2), .1)
-            gaussian3 = gaussian(np.log(2 * pi), .1)
-            tot += qi * (.8 * gaussian1(logp) + .1 * gaussian2(logp) + .1 * gaussian3(logp))
+            gaussian1 = gaussian(np.log(pi), fw)
+            gaussian2 = gaussian(np.log(pi / 2), fw)
+            gaussian3 = gaussian(np.log(2 * pi), fw)
+            tot += qi * (fh * gaussian1(logp) + hh * gaussian2(logp) + hh * gaussian3(logp))
         tot /= np.sum(qs)
         return tot
 
