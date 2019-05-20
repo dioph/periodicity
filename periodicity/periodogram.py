@@ -3,7 +3,7 @@ from astropy.stats import LombScargle
 from wavelets import WaveletAnalysis
 
 
-def lombscargle(t, x, dx=None, f0=0, fmax=None, n=5, fap_method=None, fap_level=None):
+def lombscargle(t, x, dx=None, f0=0, fmax=None, n=5, fap_method=None, fap_level=None, psd=False):
     """Computes the generalized Lomb-Scargle periodogram of a discrete signal x(t)
 
     Parameters
@@ -26,9 +26,13 @@ def lombscargle(t, x, dx=None, f0=0, fmax=None, n=5, fap_method=None, fap_level=
         None by default
     fap_level: array-like (optional)
         false alarm probabilities to approximate heights
+    psd: bool (optional)
+        whether to leave periodogram unnormalized (Fourier Spectral Density)
 
     Returns
     -------
+    ls: astropy.stats.LombScargle object
+        the full object for the given dataset
     f: array-like
         frequency array
     a: array-like
@@ -38,7 +42,10 @@ def lombscargle(t, x, dx=None, f0=0, fmax=None, n=5, fap_method=None, fap_level=
     fal: float
         false alarm level for a given FAP
     """
-    ls = LombScargle(t, x, dy=dx)
+    if psd:
+        ls = LombScargle(t, x, dy=dx, normalization='psd')
+    else:
+        ls = LombScargle(t, x, dy=dx)
     if fmax is None:
         T = float(np.median(np.diff(t)))
         fs = 1 / T
@@ -51,9 +58,9 @@ def lombscargle(t, x, dx=None, f0=0, fmax=None, n=5, fap_method=None, fap_level=
         if fap_level is not None:
             fal = ls.false_alarm_level(fap_level, method=fap_method, minimum_frequency=f0,
                                        maximum_frequency=fmax, samples_per_peak=n)
-            return f, a, fap, fal
-        return f, a, fap
-    return f, a
+            return ls, f, a, fap, fal
+        return ls, f, a, fap
+    return ls, f, a
 
 
 def window(t, n=5):
