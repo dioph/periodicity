@@ -279,9 +279,9 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None, a=1, b=2, n=8):
             R = smooth(R, Box1DKernel(width=pi // 10))
         try:
             peaks, heights = find_peaks(R, lags)
-        except IndexError:
+            bp_acf = peaks[np.argmax(heights)][0]
+        except:
             continue
-        bp_acf = peaks[np.argmax(heights)][0]
         ps.append(bp_acf)
         hs.append(np.max(heights))
         tau_max = 20 * pi / bp_acf
