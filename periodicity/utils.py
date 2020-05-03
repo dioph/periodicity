@@ -1,7 +1,8 @@
 import numpy as np
-from scipy import signal
-from scipy.optimize import minimize
 from astropy.convolution import Box1DKernel
+from scipy import interpolate, signal
+from scipy.ndimage import gaussian_filter1d
+from scipy.optimize import minimize
 
 
 def acf(y, t=None, maxlag=None, s=0, fill=False):
@@ -13,9 +14,9 @@ def acf(y, t=None, maxlag=None, s=0, fill=False):
         discrete input signal
     t: array-like (optional)
         time array
-    maxlag: int (optional)
-        maximum lag to compute ACF
-        # TODO: turn maxlag into a measure of time if t is given
+    maxlag: int or float (optional)
+        Maximum lag to compute ACF. If given as a float, will be assumed to be a measure of time and the ACF will be
+        computed for lags lower than or equal to `maxlag`.
     s: int (optional)
         standard deviation of Gaussian filter used to smooth ACF, measured in samples
     fill: bool (optional default=False)
@@ -25,7 +26,7 @@ def acf(y, t=None, maxlag=None, s=0, fill=False):
     -------
     lags: array-like
         array of lags
-    R: array-like
+    ryy: array-like
         ACF of input signal
     """
     if t is None:
@@ -34,23 +35,24 @@ def acf(y, t=None, maxlag=None, s=0, fill=False):
     if fill:
         t, y = fill_gaps(t, y)
 
-    N = len(y)
+    n = len(y)
 
     if maxlag is None:
-        maxlag = N
+        maxlag = n
 
-    f = np.fft.fft(y - y.mean(), n=2 * N)
-    R = np.fft.ifft(f * np.conjugate(f))[:maxlag].real
+    if type(maxlag) is float:
+        maxlag = np.where(t - np.min(t) <= maxlag)[0][-1] + 1
+
+    f = np.fft.fft(y - y.mean(), n=2 * n)
+    ryy = np.fft.ifft(f * np.conjugate(f))[:maxlag].real
 
     if s > 0:
-        kernel = gaussian(mu=0, sd=s)
-        h = kernel(np.arange(-(3 * s - 1), 3 * s, 1.))
-        R = smooth(R, kernel=h)
+        ryy = gaussian_filter1d(ryy, sigma=s, truncate=3.0)
 
-    R /= R[0]
+    ryy /= ryy[0]
     lags = t[:maxlag] - np.min(t[:maxlag])
 
-    return lags, R
+    return lags, ryy
 
 
 def fill_gaps(t, y):
@@ -181,6 +183,7 @@ def gaussian(mu, sd):
     f: function
         1D Gaussian with given parameters
     """
+
     def f(x):
         return 1 / (np.sqrt(2 * np.pi) * sd) * np.exp(-.5 * ((x - mu) / sd) ** 2)
 
@@ -274,11 +277,11 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None, a=1, b=2, n=8):
     for pi in periods:
         xf = filt(x, 1 / pi, 1 / pmin, fs)
         ml = np.where(t >= 2 * pi)[0][0]
-        lags, R = acf(xf, t, maxlag=ml)
+        lags, rxx = acf(xf, t, maxlag=ml)
         if pi >= 20:
-            R = smooth(R, Box1DKernel(width=pi // 10))
+            rxx = smooth(rxx, Box1DKernel(width=pi // 10))
         try:
-            peaks, heights = find_peaks(R, lags)
+            peaks, heights = find_peaks(rxx, lags)
             bp_acf = peaks[np.argmax(heights)][0]
         except:
             continue
@@ -288,10 +291,10 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None, a=1, b=2, n=8):
 
         def eps(params):
             acf_model = params[0] * np.exp(-lags / params[1]) * np.cos(2 * np.pi * lags / bp_acf)
-            return np.sum(np.square(R - acf_model))
+            return np.sum(np.square(rxx - acf_model))
 
-        results = minimize(fun=eps, x0=np.array([1., bp_acf*2]))
-        A, tau = results.x
+        results = minimize(fun=eps, x0=np.array([1., bp_acf * 2]))
+        amp, tau = results.x
         tau = min(tau, tau_max)
         ri = eps(results.x)
         qs.append((tau / bp_acf) * (ml * hs[-1] / ri))
