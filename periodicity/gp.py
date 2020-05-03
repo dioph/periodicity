@@ -4,7 +4,7 @@ from scipy.optimize import minimize
 from scipy.stats import linregress
 from tqdm.auto import tqdm
 
-from .acf import gaussian, acf_harmonic_quality
+from .utils import gaussian, acf_harmonic_quality, get_noise, acf, find_peaks
 
 
 class GPModeler(object):
@@ -35,11 +35,11 @@ class GPModeler(object):
         return ll
 
     def lnprior(self, p):
-        priors = np.append([gaussian(self.mu[i], self.sd[i]) for i in range(len(self.mu))], [self.prior])
+        priors = np.r_[[gaussian(self.mu[i], self.sd[i]) for i in range(len(self.mu))], self.prior]
         for i, (lo, hi) in enumerate(self.bounds.values()):
             if not(lo < p[i] < hi):
                 return -np.inf
-        lp = np.sum(np.log(priors[i](p[i])) for i in range(len(p)))
+        lp = np.sum([np.log(priors[i](p[i])) for i in range(len(p))])
         return lp
 
     def sample_prior(self, N):
@@ -48,9 +48,7 @@ class GPModeler(object):
         m = np.ones(N, dtype=bool)
         nbad = m.sum()
         while nbad > 0:
-            r = np.random.randn(N * (ndim - 1)).reshape((N, ndim - 1))
-            for i in range(ndim - 1):
-                samples[m, i] = r[m, i] * self.sd[i] + self.mu[i]
+            samples[m, :-1] = np.random.normal(self.mu, self.sd, (nbad, ndim - 1))
             samples[m, -1] = self.sample_period(nbad)
             lp = np.array([self.lnprior(p) for p in samples])
             m = ~np.isfinite(lp)
@@ -241,8 +239,10 @@ class TensorGPModeler(GPModeler):
         pass
 
 
-def make_gaussian_prior(t, x, pmin=None, periods=None, a=1, b=2, n=8, fundamental_height=0.8, fundamental_width=0.1):
-    """Generates a weighted sum of Gaussians as a probability prior on the signal period
+def make_gaussian_prior(t, x, pmin=None, periods=None, a=1, b=2, n=8,
+                        fundamental_height=0.8, fundamental_width=0.1):
+    """Generates a weighted sum of Gaussians as a probability prior on the
+    signal period.
 
     Based on Angus et al. (2018) MNRAS 474, 2094A
 
@@ -251,14 +251,14 @@ def make_gaussian_prior(t, x, pmin=None, periods=None, a=1, b=2, n=8, fundamenta
     t: array-like
         time array
     x: array-like
-        input quasi-periodic signal
+        input (quasi-)periodic signal
     pmin: float (optional)
         lower cutoff period to filter signal
     periods: list (optional)
         list of higher cutoff periods to filter signal
     a, b, n: floats (optional)
-        if `periods` is not given then it assumes the first `n` powers of `b` scaled by `a`:
-            periods = a * b ** np.arange(n)
+        if ``periods`` is not given then it assumes the first `n` powers of `b` scaled by `a`:
+            `periods = a * b ** np.arange(n)`
         defaults are a=1, b=2, n=8
     fundamental_height: float (optional)
         weight of the gaussian mixture on the fundamental peak
