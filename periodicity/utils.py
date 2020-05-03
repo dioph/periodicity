@@ -80,7 +80,7 @@ def fill_gaps(t, y, ts=None):
 
 
 def find_peaks(y, t=None, delta=0.):
-    """Finds function maxima and the corresponding peak heights
+    """Finds local maxima and corresponding peak prominences
 
     Parameters
     ----------
@@ -101,51 +101,15 @@ def find_peaks(y, t=None, delta=0.):
     heights: array-like
         average peak heights for each peak found
     """
-    peaks = []
-    dips = []
     if t is None:
         t = np.arange(len(y))
-    y = np.asarray(y)
-    assert len(t) == len(y), "t and y must have same length"
 
-    mn, mx = np.inf, -np.inf
-    mnpos, mxpos = np.nan, np.nan
-    lookformax = False
-
-    for i in range(len(y)):
-        if y[i] > mx:
-            mx = y[i]
-            mxpos = t[i]
-        if y[i] < mn:
-            mn = y[i]
-            mnpos = t[i]
-        if lookformax:
-            if y[i] < mx-delta:
-                peaks.append((mxpos, mx))
-                mn = y[i]
-                mnpos = t[i]
-                lookformax = False
-        else:
-            if y[i] > mn+delta and mn != -np.inf:
-                dips.append((mnpos, mn))
-                mx = y[i]
-                mxpos = t[i]
-                lookformax = True
-    peaks = np.array(peaks)
-    dips = np.array(dips)
-
-    heights = []
-    for i in range(len(peaks)):
-        h1 = peaks[i, 1] - dips[i, 1]
-        try:
-            h2 = peaks[i, 1] - dips[i+1, 1]
-            heights.append((h1+h2)/2)
-        except IndexError:
-            heights.append(h1)
-    heights = np.array(heights)
+    maxima, res = signal.find_peaks(y, prominence=delta)
+    peaks = np.array([t[maxima], y[maxima]]).T
+    heights = res['prominences']
 
     if heights.size == 0 and delta > 1e-6:
-        return find_peaks(y=y, t=t, delta=delta/2)
+        return find_peaks(y=y, t=t, delta=delta / 2)
 
     return peaks, heights
 
