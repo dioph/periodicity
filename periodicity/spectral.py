@@ -1,12 +1,15 @@
 import numpy as np
 from astropy.timeseries import LombScargle
 from scipy.signal import hilbert
-from wavelets import WaveletAnalysis
+import pywt
+# TODO: change wavelets.WaveletAnalysis to pywt
 
-from periodicity.utils import find_extrema, find_zero_crossings, get_envelope, fill_gaps
+from periodicity.utils import find_extrema, find_zero_crossings, \
+    get_envelope, fill_gaps
 
 
-def lombscargle(t, x, dx=None, f0=0, fmax=None, n=5, fap_method=None, fap_level=None, psd=False):
+def lombscargle(t, x, dx=None, f0=0, fmax=None, n=5,
+                fap_method=None, fap_level=None, psd=False):
     """Computes the generalized Lomb-Scargle periodogram of a discrete signal x(t)
 
     Parameters
@@ -121,7 +124,8 @@ def wavelet(t, x, n=1):
 # TODO: check out Supersmoother (Reimann 1994)
 
 
-def emd(x, t=None, maxiter=2000, theta_1=0.05, theta_2=0.50, alpha=0.05, delta=0., nbsym=2):
+def emd(x, t=None, maxiter=2000, theta_1=0.05, theta_2=0.50,
+        alpha=0.05, delta=0., nbsym=2):
     """Empirical Mode Decomposition
 
     G. Rilling, P. Flandrin, P. Gonçalves, June 2003
