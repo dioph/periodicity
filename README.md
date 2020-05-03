@@ -4,22 +4,23 @@ Useful tools for analysis of periodicities in time series data.
 
 Includes:
 * Auto-Correlation Function
-* Fourier methods:
+* Spectral methods:
     * Lomb-Scargle periodogram
-    * Wavelet Transform (in progress)
+    * Wavelet Transform (WIP)
+    * Hilbert-Huang Transform (WIP)
 * Phase-folding methods:
     * String Length
     * Phase Dispersion Minimization
-    * Analysis of Variance (in progress)
+    * Analysis of Variance (soon™)
 * Gaussian Processes:
     * `george` implementation
     * `celerite` implementation
-    * `pymc3` implementation (in progress)
+    * `pymc3` implementation (soon™)
 
 ## Quick start
-### Installing current release from pypi (v0.1.0-alpha)
+### Installing current release from pypi (v0.1.0b2)
     $ pip install periodicity
-### Installing current development version
+### Installing current development version (v1.0b1)
     $ git clone https://github.com/dioph/periodicity.git
     $ cd periodicity
     $ python setup.py install
