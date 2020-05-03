@@ -22,8 +22,12 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/dioph/periodicity",
     packages=setuptools.find_packages(),
-    install_requires=['numpy', 'astropy', 'scipy>=1.2.0',
-                      'emcee', 'tqdm', 'autograd'],
+    install_requires=["numpy", "astropy", "scipy>=1.2.0",
+                      "emcee", "tqdm", "autograd", "PyWavelets"],
+    extras_require={
+        "test": ["pytest"],
+        "docs": ["numpydoc", "sphinx_rtd_theme"]
+    },
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

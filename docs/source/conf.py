@@ -7,6 +7,7 @@
 #
 import os
 import sys
+import sphinx_rtd_theme
 sys.path.insert(0, os.path.abspath('.'))
 
 import periodicity
@@ -27,6 +28,7 @@ extensions = [
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
     'sphinx.ext.githubpages',
+    'sphinx_rtd_theme',
     'numpydoc'
 ]
 
@@ -46,7 +48,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'periodicity'
-copyright = '2019, Eduardo Nunes'
+copyright = '2019-2020, Eduardo Nunes'
 author = 'Eduardo Nunes'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -82,9 +84,8 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'neo_rtd_theme'
-import sphinx_theme
-html_theme_path = [sphinx_theme.get_html_theme_path()]
+html_theme = 'sphinx_rtd_theme'
+html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -165,9 +166,6 @@ texinfo_documents = [
      author, 'periodicity', 'One line description of project.',
      'Miscellaneous'),
 ]
-
-
-
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {'python': ('https://docs.python.org/3/', None),
