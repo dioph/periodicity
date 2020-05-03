@@ -1,5 +1,5 @@
 import numpy as np
-from .acf import gaussian, smooth
+from scipy.ndimage import gaussian_filter1d
 
 
 def stringlength(t, x, dphi=0.1, n_periods=1000, s=0):
@@ -29,7 +29,7 @@ def stringlength(t, x, dphi=0.1, n_periods=1000, s=0):
     # scale x to range from -0.25 to +0.25
     x = (x - np.max(x)) / (2 * (np.max(x) - np.min(x))) - 0.25
     df = dphi / (np.max(t) - np.min(t))
-    periods = 1 / np.linspace(df, n_periods*df, n_periods)
+    periods = 1 / np.linspace(df, n_periods * df, n_periods)
     periods.sort()
     ell = []
     for period in periods:
@@ -42,9 +42,8 @@ def stringlength(t, x, dphi=0.1, n_periods=1000, s=0):
     # TODO: consider flagging false periods for rejection
     ell = np.array(ell)
     if s > 0:
-        kernel = gaussian(mu=0, sd=s)
-        h = kernel(np.arange(-(3 * s - 1), 3 * s, 1.))
-        ell = smooth(ell, kernel=h)
+        ell = gaussian_filter1d(ell, sigma=s, truncate=3.0)
+
     return periods, ell
 
 
@@ -81,7 +80,7 @@ def pdm(t, x, nb=5, nc=2, pmin=.01, pmax=10, n_periods=1000, s=0):
     sigma = np.var(x, ddof=1)
     t0 = t.max() - t.min()
     theta = []
-    periods = np.linspace(pmin*t0, pmax*t0, n_periods)
+    periods = np.linspace(pmin * t0, pmax * t0, n_periods)
     m0 = nb * nc
     for period in periods:
         phi = ((t / period) % 1)
@@ -96,13 +95,12 @@ def pdm(t, x, nb=5, nc=2, pmin=.01, pmax=10, n_periods=1000, s=0):
             mj.append(m[mask])
         sj = np.array([np.var(k, ddof=1) for k in mj])
         nj = np.array([k.size for k in mj])
-        ss = np.sum((nj - 1) * sj)/(np.sum(nj) - m0)
-        theta.append(ss/sigma)
+        ss = np.sum((nj - 1) * sj) / (np.sum(nj) - m0)
+        theta.append(ss / sigma)
     theta = np.array(theta)
     if s > 0:
-        kernel = gaussian(mu=0, sd=s)
-        h = kernel(np.arange(-(3 * s - 1), 3 * s, 1.))
-        theta = smooth(theta, kernel=h)
+        theta = gaussian_filter1d(theta, sigma=s, truncate=3.0)
+
     return periods, theta
 
 
@@ -138,9 +136,8 @@ def pdm2(t, x, pmin=None, pmax=None, n_periods=None, s=0, oversample=10, do_subh
     thetas = np.array(thetas)[::-1]
     periods = periods[::-1]
     if s > 0:
-        kernel = gaussian(mu=0, sd=s)
-        h = kernel(np.arange(-(3 * s - 1), 3 * s, 1.))
-        thetas = smooth(thetas, kernel=h)
+        thetas = gaussian_filter1d(thetas, sigma=s, truncate=3.0)
+
     return periods, thetas
 
 # TODO: Analysis of Variance (Schwarzenberg-Czerny 1989)
