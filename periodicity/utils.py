@@ -114,6 +114,133 @@ def find_peaks(y, t=None, delta=0.):
     return peaks, heights
 
 
+def find_extrema(y, delta=0.):
+    """Finds local extrema
+
+    Parameters
+    ----------
+    y: array-like
+        signal array
+    delta: float, optional
+         minimum peak prominence
+
+    Returns
+    -------
+    peaks: array-like
+        maxima indices
+    dips: array-like
+        minima indices
+    """
+    maxima, _ = signal.find_peaks(y, prominence=delta)
+    minima, _ = signal.find_peaks(-y, prominence=delta)
+    return maxima, minima
+
+
+def find_zero_crossings(y, height=None, delta=0.):
+    """Finds zero crossing indices
+
+    Parameters
+    ----------
+    y: array-like
+        signal
+    height: float, optional
+        maximum deviation from zero
+    delta: float, optional
+        prominence used in `scipy.signal.find_peaks` when `height` is specified.
+
+    Returns
+    -------
+    indzer: array-like
+        zero-crossing indices
+    """
+    if height is None:
+        indzer, = np.where(np.diff(np.signbit(y)))
+    else:
+        indzer, _ = signal.find_peaks(-np.abs(y), height=-height, prominence=delta)
+    return indzer
+
+
+def get_envelope(y, t=None, delta=0., nbsym=0):
+    """Interpolates maxima and minima with cubic splines to derive upper and lower envelopes.
+
+    Parameters
+    ----------
+    y: array-like
+        signal
+    t: array-like, optional
+        signal timestamps
+    delta: float, optional
+        prominence to use in `find_extrema`
+    nbsym: int, optional
+        number of extrema to repeat on either side of the signal
+
+    Returns
+    -------
+    upper: array-like
+        upper envelope
+    lower: array-like
+        lower envelope
+    """
+    if t is None:
+        t = np.arange(len(y))
+
+    peaks, dips = find_extrema(y, delta)
+    if nbsym == 0:
+        peaks = np.r_[0, peaks, len(y) - 1]
+        tmax = t[peaks]
+        ymax = y[peaks]
+        dips = np.r_[0, peaks, len(y) - 1]
+        tmin = t[dips]
+        ymin = y[dips]
+    else:
+        lpeaks = peaks[:nbsym][::-1]
+        rpeaks = peaks[-nbsym:][::-1]
+        loff = 2 * t[0] - t[lpeaks]
+        roff = 2 * t[-1] - t[rpeaks]
+        tmax = np.r_[loff, t[peaks], roff]
+        ymax = np.r_[y[lpeaks], y[peaks], y[rpeaks]]
+        ldips = dips[:nbsym][::-1]
+        rdips = dips[-nbsym:][::-1]
+        loff = 2 * t[0] - t[ldips]
+        roff = 2 * t[-1] - t[rdips]
+        tmin = np.r_[loff, t[dips], roff]
+        ymin = np.r_[y[ldips], y[dips], y[rdips]]
+
+    tck = interpolate.splrep(tmax, ymax)
+    upper = interpolate.splev(t, tck)
+    tck = interpolate.splrep(tmin, ymin)
+    lower = interpolate.splev(t, tck)
+    return upper, lower
+
+
+def get_noise(y, sigma=3., niter=3):
+    """Finds the standard deviation of a white gaussian noise in the data
+
+    Parameters
+    ----------
+    y: array-like
+        signal array
+    sigma: float, optional (default=3.0)
+        sigma_clip value
+    niter: int, optional (default=3)
+        number of iterations for k-sigma clipping
+
+    Returns
+    -------
+    noise: float
+        estimate of standard deviation of the noise
+    """
+    resid = y - signal.medfilt(y, 3)
+    sd = np.std(resid)
+    index = np.arange(resid.size)
+    for i in range(niter):
+        mu = np.mean(resid[index])
+        sd = np.std(resid[index])
+        index, = np.where(np.abs(resid - mu) < sigma * sd)
+    noise = sd / .893421
+    return noise
+
+
 def gaussian(mu, sd):
     """Simple 1D Gaussian function generator
 
