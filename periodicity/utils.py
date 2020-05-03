@@ -55,45 +55,27 @@ def acf(y, t=None, maxlag=None, s=0, fill=False):
     return lags, ryy
 
 
-def fill_gaps(t, y):
+def fill_gaps(t, y, ts=None):
     """Linear interpolation to create a uniformly sampled signal
 
     Parameters
     ----------
     t: array-like
-        time array
+        signal timestamps
     y: array-like
-        signal array
+        signal samples
+    ts: float, optional
+        sampling period; if timestamps are sorted, can be estimated if omitted.
 
     Returns
     -------
-    tnew: array-like
-        new sampling times uniformly spaced
-    ynew: array-like
-        signal with gaps filled by linear interpolation
+    tnew:
+    ynew:
     """
-    T = float(np.median(np.diff(t)))
-    gaps = np.where(np.diff(t) > 1.5 * T)[0]
-    t_gaps = []
-    y_gaps = []
-    tnew = t
-    ynew = y
-    for g in gaps:
-        t0, t1 = tnew[g:g + 2]
-        y0, y1 = ynew[g:g + 2]
-        tfill = np.arange(t0 + T, t1, T)
-        t_gaps.append(tfill)
-        y_gaps.append(y0 + (tfill - t0) * (y1 - y0) / (t1 - t0))
-    ids = []
-    shift = 1
-    for i, tg, yg in zip(gaps, t_gaps, y_gaps):
-        idx = i + shift
-        tnew = np.insert(tnew, idx, tg)
-        ynew = np.insert(ynew, idx, yg)
-        n = len(tg)
-        ids.append(np.arange(idx, idx + n))
-        shift += n
-    tnew = np.arange(tnew.size) * T + tnew[0]
+    if ts is None:
+        ts = float(np.median(np.diff(t)))
+    tnew = np.arange(np.min(t), np.max(t), ts)
+    ynew = interpolate.interp1d(t, y)(tnew)
     return tnew, ynew
 
 
