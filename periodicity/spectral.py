@@ -2,10 +2,8 @@ import numpy as np
 from astropy.timeseries import LombScargle
 from scipy.signal import hilbert
 import pywt
-# TODO: change wavelets.WaveletAnalysis to pywt
 
-from periodicity.utils import find_extrema, find_zero_crossings, \
-    get_envelope, fill_gaps
+from .utils import find_extrema, find_zero_crossings, get_envelope, fill_gaps
 
 
 def lombscargle(t, x, dx=None, f0=0, fmax=None, n=5,
@@ -90,35 +88,35 @@ def window(t, n=5):
     return f, a
 
 
-def wavelet(t, x, n=1):
+def wavelet(t, x, periods):
     """Wavelet Power Spectrum using Morlet wavelets
 
     Parameters
     ----------
     t: array-like
-        time array
+        Time array
     x: array-like
-        signal array
-    n: float (optional default=1)
-        multiplier of number of scales considered
+        Signal array
+    periods: array-like
+        Periods to use, in the same units as ``t``
 
     Returns
     -------
-    wa: wavelets.WaveletAnalysis object
-        the full object for the given dataset
-    periods: array-like
-        trial periods array
-    gwps: array-like
-        Global Wavelet Power Spectrum (WPS projected on period axis)
-    wps: array-like
+    power: array-like
         Wavelet Power Spectrum
     """
     dt = float(np.median(np.diff(t)))
-    wa = WaveletAnalysis(x, t, dt=dt, mask_coi=True, unbias=True, dj=0.125 / n)
-    periods = wa.fourier_periods
-    wps = wa.wavelet_power
-    gwps = wa.global_wavelet_spectrum
-    return wa, periods, gwps, wps
+    scales = pywt.scale2frequency('morl', 1) * periods / dt
+    conv_complex = len(scales) * len(x)
+    n = len(scales) + len(x) - 1
+    fft_complex = n * np.log2(n)
+    if fft_complex < conv_complex:
+        method = 'fft'
+    else:
+        method = 'conv'
+    coefs, freqs = pywt.cwt(x, scales, 'morl', dt, method=method)
+    power = np.square(np.abs(coefs))
+    return power
 
 
 # TODO: check out Supersmoother (Reimann 1994)
