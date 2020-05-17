@@ -7,9 +7,26 @@ with open("README.md", 'r') as f:
 
 version = re.search(
     '^__version__\\s*=\\s*"(.*)"',
-    open('periodicity/__init__.py').read(),
+    open("periodicity/__init__.py").read(),
     re.M
 ).group(1)
+
+install_requires = [
+    "astropy >= 3.2",
+    "autograd",
+    "celerite",
+    "emcee >= 3.0",
+    "george",
+    "numpy",
+    "PyWavelets >= 0.5",
+    "scipy >= 1.1",
+    "tqdm"
+]
+
+extras_require = {
+    "test": ["pytest"],
+    "docs": ["numpydoc", "sphinx_rtd_theme"]
+}
 
 setuptools.setup(
     name="periodicity",
@@ -22,12 +39,8 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/dioph/periodicity",
     packages=setuptools.find_packages(),
-    install_requires=["numpy", "astropy", "scipy>=1.2.0",
-                      "emcee", "tqdm", "autograd", "PyWavelets"],
-    extras_require={
-        "test": ["pytest"],
-        "docs": ["numpydoc", "sphinx_rtd_theme"]
-    },
+    install_requires=install_requires,
+    extras_require=extras_require,
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
