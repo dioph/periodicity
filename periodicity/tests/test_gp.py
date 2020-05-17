@@ -1,48 +1,58 @@
-from .. import gp
-from astropy.io import ascii
+import unittest
 
-from .. import gp
+import numpy as np
 
-lightcurve1 = ascii.read('periodicity/tests/data/lightcurve1.csv')
-lightcurve2 = ascii.read('periodicity/tests/data/lightcurve2.csv')
-
-
-def test_file_format_lightcurve1():
-    assert lightcurve1.colnames == ['time', 'flux', 'flux_err']
-    assert lightcurve1['flux'].size == lightcurve1['time'].size
-    assert lightcurve1['time'].size == 2145
+from periodicity.data import lightcurve1, lightcurve2
+from periodicity.gp import make_gaussian_prior, FastGPModeler
 
 
-def test_file_format_lightcurve2():
-    assert lightcurve2.colnames == ['time', 'flux', 'flux_err']
-    assert lightcurve2['flux'].size == lightcurve2['time'].size
-    assert lightcurve2['time'].size == 2148
+class MakeGaussianPriorTest(unittest.TestCase):
+    def test_lightcurve_1(self):
+        log_periods = np.linspace(-3, 5, 1000)
+        t, y, dy = lightcurve1()
+        prior = make_gaussian_prior(t, y,
+                                    fundamental_height=0.9,
+                                    fundamental_width=0.2)
+        prior_prob = prior(log_periods)
+        # prior has a maximum at approx 24.7 days
+        self.assertEqual(775, prior_prob.argmax())
+        peaks = [i for i in range(1, len(log_periods) - 1)
+                 if prior_prob[i - 1] < prior_prob[i]
+                 and prior_prob[i + 1] < prior_prob[i]]
+        # prior has peaks at 0.6, 1.1 and 24.7 days
+        self.assertEqual(3, len(peaks))
+
+    def test_lightcurve_2(self):
+        log_periods = np.linspace(-3, 5, 1000)
+        t, y, dy = lightcurve2()
+        prior = make_gaussian_prior(t, y)
+        prior_prob = prior(log_periods)
+        # prior has a maximum at approx 10.7 days
+        self.assertEqual(671, prior_prob.argmax())
+        peaks = [i for i in range(1, len(log_periods) - 1)
+                 if prior_prob[i - 1] < prior_prob[i]
+                 and prior_prob[i + 1] < prior_prob[i]]
+        # prior has peaks at 0.4, 0.8, 1.7, 3.5, 5.6, 10.7 and 21.5 days
+        self.assertEqual(7, len(peaks))
 
 
-def test_make_gaussian_prior1():
-    prior = gp.make_gaussian_prior(lightcurve1['time'], lightcurve1['flux'])
-    logp = gp.np.linspace(-3, 5, 1000)
-    probs = prior(logp)
-    assert probs.argmax() == 775
-    peaks = [i for i in range(1, len(logp) - 1) if probs[i - 1] < probs[i] and probs[i + 1] < probs[i]]
-    assert len(peaks) == 7
+class FastGPTest(unittest.TestCase):
+    def test_class_constructor(self):
+        model = FastGPModeler([1, 2], [3, 4])
+        self.assertEqual((-17, -13, 0, 3), model.mu)
 
+    def test_minimize(self):
+        t, y, dy = lightcurve2()
+        model = FastGPModeler(t, y)
+        _, _, _, v = model.minimize()
+        self.assertAlmostEqual(10.618, np.exp(v[4]), places=3)
 
-def test_make_gaussian_prior2():
-    prior = gp.make_gaussian_prior(lightcurve2['time'], lightcurve2['flux'])
-    logp = gp.np.linspace(-3, 5, 1000)
-    probs = prior(logp)
-    assert probs.argmax() == 671
-    peaks = [i for i in range(1, len(logp) - 1) if probs[i - 1] < probs[i] and probs[i + 1] < probs[i]]
-    assert len(peaks) == 7
+    def test_docs_example(self):
+        np.random.seed(42)
+        t, y, dy = lightcurve1()
+        model = FastGPModeler(t, y)
+        model.prior = make_gaussian_prior(t, y)
+        model.minimize()
+        samples = model.mcmc(nwalkers=32, nsteps=5000, burn=500)
+        self.assertAlmostEqual(24.2, np.exp(np.median(samples[:, 4])), places=1)
 
-
-def test_class_constructor():
-    model = gp.FastGPModeler([1, 2], [3, 4])
-    assert model.mu == (-17, -13, 0, 3)
-
-
-def test_minimize():
-    model = gp.FastGPModeler(lightcurve2['time'], lightcurve2['flux'])
-    _, _, _, v = model.minimize()
-    assert 2.35 < v[4] < 2.37
