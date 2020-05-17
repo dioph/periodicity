@@ -104,7 +104,8 @@ def pdm(t, x, nb=5, nc=2, pmin=.01, pmax=10, n_periods=1000, s=0):
     return periods, theta
 
 
-def pdm2(t, x, pmin=None, pmax=None, n_periods=None, s=0, oversample=10, do_subharmonic=False):
+def pdm2(t, x, pmin=None, pmax=None, n_periods=None, s=0,
+         oversample=10, do_subharmonic=False):
     t = np.asarray(t)
     x = np.asarray(x)
     sigma = np.var(x, ddof=1)
@@ -123,7 +124,8 @@ def pdm2(t, x, pmin=None, pmax=None, n_periods=None, s=0, oversample=10, do_subh
     periods = np.linspace(pmax, pmin, n_periods)
     for period in periods:
         phi = ((t - t[0]) / period) % 1
-        masks = np.array([np.logical_and(phi < (b + 1) / 10, phi >= b / 10) for b in range(10)])
+        masks = np.array([np.logical_and(phi < (b + 1) / 10, phi >= b / 10)
+                          for b in range(10)])
         sj = np.array([np.var(x[masks[j]], ddof=1) for j in range(10)])
         nj = masks.sum(axis=1)
         good = nj > 1

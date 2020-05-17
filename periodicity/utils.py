@@ -356,7 +356,7 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None, a=1, b=2, n=8):
         try:
             peaks, heights = find_peaks(rxx, lags)
             bp_acf = peaks[np.argmax(heights)][0]
-        except:
+        except Exception:
             continue
         ps.append(bp_acf)
         hs.append(np.max(heights))

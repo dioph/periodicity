@@ -13,7 +13,8 @@ class GPModeler(object):
         self.x = np.array(x, float)
 
         def uniform_prior(logp):
-            window = np.logical_and(self.bounds['log_P'][0] < logp, logp < self.bounds['log_P'][1])
+            window = np.logical_and(self.bounds['log_P'][0] < logp,
+                                    logp < self.bounds['log_P'][1])
             probs = np.ones_like(logp)
             probs[~window] = 0.0
             return probs
@@ -34,7 +35,8 @@ class GPModeler(object):
         return ll
 
     def lnprior(self, p):
-        priors = np.r_[[gaussian(self.mu[i], self.sd[i]) for i in range(len(self.mu))], self.prior]
+        priors = np.r_[[gaussian(self.mu[i], self.sd[i])
+                        for i in range(len(self.mu))], self.prior]
         for i, (lo, hi) in enumerate(self.bounds.values()):
             if not(lo < p[i] < hi):
                 return -np.inf
