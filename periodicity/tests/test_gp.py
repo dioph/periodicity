@@ -54,5 +54,5 @@ class FastGPTest(unittest.TestCase):
         model.prior = make_gaussian_prior(t, y)
         model.minimize()
         samples = model.mcmc(nwalkers=32, nsteps=5000, burn=500)
-        self.assertAlmostEqual(24.2, np.exp(np.median(samples[:, 4])), places=1)
+        self.assertAlmostEqual(24., np.exp(np.median(samples[:, 4])), places=0)
 

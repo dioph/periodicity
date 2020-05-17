@@ -6,7 +6,7 @@ import pywt
 from .utils import find_extrema, find_zero_crossings, get_envelope, fill_gaps
 
 
-def lombscargle(t, x, dx=None, f0=0, fmax=None, n=5,
+def lombscargle(t, x, dx=None, f0=None, fmax=None, n=5,
                 fap_method=None, fap_level=None, psd=False):
     """Computes the generalized Lomb-Scargle periodogram of a discrete signal x(t)
 
