@@ -102,11 +102,15 @@ def wavelet(t, x, periods):
 
     Returns
     -------
-    power: array-like
-        Wavelet Power Spectrum
+    power: array
+        Wavelet Power Spectrum.
+    coi: tuple
+        Samples for plotting the Cone of Influence boundaries.
+    mask_coi: array
+        True inside the COI, same shape as ``power``.
     """
     dt = float(np.median(np.diff(t)))
-    scales = pywt.scale2frequency('morl', 1) * periods / dt
+    scales = pywt.scale2frequency('morl', 1) * np.asarray(periods) / dt
     conv_complex = len(scales) * len(x)
     n = len(scales) + len(x) - 1
     fft_complex = n * np.log2(n)
@@ -116,7 +120,25 @@ def wavelet(t, x, periods):
         method = 'conv'
     coefs, freqs = pywt.cwt(x, scales, 'morl', dt, method=method)
     power = np.square(np.abs(coefs))
-    return power
+    # Cone of Influence (COI)
+    tmax = np.max(t)
+    tmin = np.min(t)
+    pmax = np.max(periods)
+    pmin = np.min(periods)
+    T, P = np.meshgrid(t, periods)
+    S = 2 ** .5 * P
+    mask_coi = (S < np.minimum(T - tmin, tmax - T))
+    p_samples = np.logspace(np.log10(pmin), np.log10(pmax), 100)
+    p_samples = p_samples[2 ** .5 * p_samples < (tmax - tmin) / 2]
+    t1 = tmin + 2 ** .5 * p_samples
+    t2 = tmax - 2 ** .5 * p_samples
+    t_samples = np.hstack((t1, t2))
+    p_samples = np.hstack((p_samples, p_samples))
+    sorted_ids = t_samples.argsort()
+    sorted_t_samples = t_samples[sorted_ids]
+    sorted_p_samples = p_samples[sorted_ids]
+    coi = (sorted_t_samples, sorted_p_samples)
+    return power, coi, mask_coi
 
 
 # TODO: check out Supersmoother (Reimann 1994)
