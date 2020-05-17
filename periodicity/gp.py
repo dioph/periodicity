@@ -2,7 +2,6 @@ from autograd import numpy as np
 import emcee
 from scipy.optimize import minimize
 from scipy.stats import linregress
-from tqdm.auto import tqdm
 
 from .utils import gaussian, acf_harmonic_quality, get_noise, acf, find_peaks
 
@@ -130,9 +129,8 @@ class GPModeler(object):
             p0 = self.sample_prior(nwalkers)
         else:
             p0 = p + 1e-5 * np.random.randn(nwalkers, ndim)
-        for _ in tqdm(sampler.sample(p0, iterations=nsteps), total=nsteps):
-            pass
-        samples = sampler.chain[:, burn:, :].reshape(-1, ndim)
+        sampler.run_mcmc(p0, nsteps, progress=True)
+        samples = sampler.get_chain(discard=burn, flat=True)
         return samples
 
 
