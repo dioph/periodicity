@@ -277,8 +277,10 @@ def smooth(y, kernel):
     yf: array-like
         Smoothed signal
     """
-    double_y = np.append(y[::-1], y)
-    yf = np.convolve(double_y, kernel, mode='same')[len(y):]
+    w = kernel.shape[0]
+    s = np.r_[y[w - 1:0:-1], y, y[-2:-w - 1:-1]]
+    sf = np.convolve(s, kernel, mode='valid')
+    yf = sf[w // 2 - 1:-w // 2]
     return yf
 
 
