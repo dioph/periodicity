@@ -20,19 +20,25 @@ Installing the most recent stable version of the package is as easy as::
 Changelog
 =========
 
-1.0 (2019-00-00)
+1.0 (2020-00-00)
 ----------------
 
 Initial beta release
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+    :maxdepth: 2
+    :caption: User Guide
 
-   spectral
-   phase
-   gp
-   api
+    spectral
+    phase
+    gp
+    api
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Tutorials
+
+    tutorials/wavelet
 
 
 

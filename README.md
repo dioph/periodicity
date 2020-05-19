@@ -2,11 +2,13 @@
 
 Useful tools for analysis of periodicities in time series data.
 
-Includes:
+__Documentation: https://periodicity.readthedocs.io__
+
+Currently includes:
 * Auto-Correlation Function
 * Spectral methods:
     * Lomb-Scargle periodogram
-    * Wavelet Transform (WIP)
+    * Wavelet Transform
     * Hilbert-Huang Transform (WIP)
 * Phase-folding methods:
     * String Length
@@ -23,29 +25,10 @@ Includes:
 ### Installing current development version (v1.0b1)
     $ git clone https://github.com/dioph/periodicity.git
     $ cd periodicity
-    $ python setup.py install
-## Example using GP with astronomical data
-```python
-from periodicity.gp import *
-from lightkurve import search_lightcurvefile
-
-lcs = search_lightcurvefile(target=9895037, quarter=[4,5]).download_all()
-lc = lcs[0].PDCSAP_FLUX.normalize().append(lcs[1].PDCSAP_FLUX.normalize())
-lc = lc.remove_nans().remove_outliers().bin(binsize=4)
-
-t, x = lc.time, lc.flux
-x = x - x.mean()
-
-model = FastGPModeler(t, x)
-model.prior = make_gaussian_prior(t, x)
-model.minimize()
-samples = model.mcmc(nwalkers=32, nsteps=5000, burn=500)
-
-print('Median period: {:.2f}'.format(np.exp(np.median(samples[:, 4]))))
-```
+    $ pip install .
 
 ### Visualization of this example:
 
-![gp_example](https://github.com/dioph/periodicity/blob/master/figures/example2.png?raw=True)
+![gp_example](https://raw.githubusercontent.com/dioph/periodicity/master/docs/source/_static/images/example2.png)
 
-![gp_example](https://github.com/dioph/periodicity/blob/master/figures/example1.png?raw=True)
+![gp_example](https://raw.githubusercontent.com/dioph/periodicity/master/docs/source/_static/images/example1.png)

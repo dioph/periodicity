@@ -25,7 +25,7 @@ install_requires = [
 
 extras_require = {
     "test": ["pytest"],
-    "docs": ["numpydoc", "sphinx_rtd_theme"]
+    "docs": ["jupyter", "numpydoc", "pandoc", "sphinx_rtd_theme"]
 }
 
 setuptools.setup(
@@ -34,7 +34,7 @@ setuptools.setup(
     author="Eduardo Nunes",
     author_email="dioph@pm.me",
     license="MIT",
-    description="Useful tools for analysis of periodicities in time series data",
+    description="Useful tools for periodicity analysis in time series data.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/dioph/periodicity",

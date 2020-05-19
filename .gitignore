@@ -2,9 +2,9 @@
 .pytest_cache
 build
 dist
-*.egg-info
-docs/build
+periodicity.egg-info
 venv
 __pycache__
-
-
+docs/build
+docs/source/_static/notebooks/.ipynb_checkpoints
+docs/source/tutorials
