@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from periodicity.data import lightcurve1, lightcurve2
-from periodicity.gp import make_gaussian_prior, FastGPModeler
+from periodicity.gp import make_gaussian_prior, FastGPModeler, StrongGPModeler
 
 
 class MakeGaussianPriorTest(unittest.TestCase):
@@ -53,6 +53,11 @@ class FastGPTest(unittest.TestCase):
         model = FastGPModeler(t, y)
         model.prior = make_gaussian_prior(t, y)
         model.minimize()
-        samples = model.mcmc(nwalkers=32, nsteps=5000, burn=500)
+        samples = model.mcmc(n_walkers=32, n_steps=5000, burn=500)
         self.assertAlmostEqual(24., np.exp(np.median(samples[:, 4])), places=0)
 
+
+class StrongGPTest(unittest.TestCase):
+    def test_class_constructor(self):
+        model = StrongGPModeler([1, 2], [3, 4])
+        self.assertEqual((-17, -13, 5, 1.9), model.mu)
