@@ -4,6 +4,9 @@ from scipy import interpolate, signal
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import minimize
 
+__all__ = ['acf', 'fill_gaps', 'find_peaks', 'find_extrema',
+           'find_zero_crossings', 'get_envelope', 'get_noise', 'gaussian',
+           'smooth', 'filt', 'acf_harmonic_quality']
 
 
 def acf(y, t=None, max_lag=None, s=0, fill=False):
@@ -12,23 +15,25 @@ def acf(y, t=None, max_lag=None, s=0, fill=False):
     Parameters
     ----------
     y: array-like
-        discrete input signal
-    t: array-like (optional)
-        time array
-    maxlag: int or float (optional)
-        Maximum lag to compute ACF. If given as a float, will be assumed to be a measure of time and the ACF will be
-        computed for lags lower than or equal to `maxlag`.
-    s: int (optional)
-        standard deviation of Gaussian filter used to smooth ACF, measured in samples
-    fill: bool (optional default=False)
-        whether to use linear interpolation to sample signal uniformly
+        Discrete input signal.
+    t: array-like, optional
+        Time array. If not given, integer indices will be used.
+    max_lag: int or float, optional
+        Maximum lag to compute ACF.
+        If given as a float, will be assumed to be a measure of time and the ACF
+        will be computed for lags lower than or equal to `max_lag`.
+    s: int, optional
+        Standard deviation of Gaussian filter used to smooth ACF,
+        measured in samples.
+    fill: bool, optional
+        Whether to use linear interpolation to sample signal uniformly.
 
     Returns
     -------
     lags: array-like
-        array of lags
+        Array of lags.
     ryy: array-like
-        ACF of input signal
+        ACF of input signal.
     """
     if t is None:
         t = np.arange(len(y))
@@ -57,21 +62,23 @@ def acf(y, t=None, max_lag=None, s=0, fill=False):
 
 
 def fill_gaps(t, y, ts=None):
-    """Linear interpolation to create a uniformly sampled signal
+    """Linear interpolation to create a uniformly sampled signal.
 
     Parameters
     ----------
     t: array-like
-        signal timestamps
+        Signal timestamps.
     y: array-like
-        signal samples
+        Signal samples.
     ts: float, optional
-        sampling period; if timestamps are sorted, can be estimated if omitted.
+        Sampling period. If omitted, it will be estimated from `t`.
 
     Returns
     -------
-    tnew:
-    ynew:
+    t_new: ndarray
+        Evenly spaced timestamps.
+    y_new: ndarray
+        Interpolated signal.
     """
     if ts is None:
         ts = float(np.median(np.diff(t)))
@@ -81,26 +88,24 @@ def fill_gaps(t, y, ts=None):
 
 
 def find_peaks(y, t=None, delta=0.):
-    """Finds local maxima and corresponding peak prominences
+    """Finds local maxima and corresponding peak prominences.
 
     Parameters
     ----------
     y: array-like
-        signal array
-    t: array-like (optional)
-        time array
-        if not given will use indexes
-    delta: float (optional)
-        minimum difference between a peak and the following points before a peak may be considered a peak.
-        default: 0.0
-        recommended: delta >= RMSnoise * 5
+        Signal array.
+    t: array-like, optional
+        Time array. If not given, integer indices will be used.
+    delta: float, optional
+        Minimum peak prominence.
+        Recommended: ``delta >= rms_noise * 5``
 
     Returns
     -------
-    peaks: array-like
-        [tmax, ymax] for each maximum found
-    heights: array-like
-        average peak heights for each peak found
+    peaks: ndarray
+        [t_max, y_max] for each maximum found.
+    heights: ndarray
+        Peak prominences for each maximum found.
     """
     if t is None:
         t = np.arange(len(y))
@@ -116,21 +121,21 @@ def find_peaks(y, t=None, delta=0.):
 
 
 def find_extrema(y, delta=0.):
-    """Finds local extrema
+    """Finds local extrema.
 
     Parameters
     ----------
     y: array-like
-        signal array
+        Signal array.
     delta: float, optional
-         minimum peak prominence
+        Minimum peak prominence.
 
     Returns
     -------
-    peaks: array-like
-        maxima indices
-    dips: array-like
-        minima indices
+    maxima: ndarray
+        Maximum indices.
+    minima: ndarray
+        Minimum indices.
     """
     maxima, _ = signal.find_peaks(y, prominence=delta)
     minima, _ = signal.find_peaks(-y, prominence=delta)
@@ -138,21 +143,22 @@ def find_extrema(y, delta=0.):
 
 
 def find_zero_crossings(y, height=None, delta=0.):
-    """Finds zero crossing indices
+    """Finds zero crossing indices.
 
     Parameters
     ----------
     y: array-like
-        signal
+        Signal.
     height: float, optional
-        maximum deviation from zero
+        Maximum deviation from zero.
     delta: float, optional
-        prominence used in `scipy.signal.find_peaks` when `height` is specified.
+        Prominence value used in `scipy.signal.find_peaks` when `height` is
+        specified.
 
     Returns
     -------
-    indzer: array-like
-        zero-crossing indices
+    ind_zer: ndarray
+        Zero-crossing indices.
     """
     if height is None:
         ind_zer, = np.where(np.diff(np.signbit(y)))
@@ -168,20 +174,20 @@ def get_envelope(y, t=None, delta=0., n_rep=0):
     Parameters
     ----------
     y: array-like
-        signal
+        Signal.
     t: array-like, optional
-        signal timestamps
+        Signal timestamps. If not given, integer indices will be used.
     delta: float, optional
-        prominence to use in `find_extrema`
-    nbsym: int, optional
-        number of extrema to repeat on either side of the signal
+        Prominence value to use in `find_extrema`.
+    n_rep: int, optional
+        Number of extrema to repeat on either side of the signal.
 
     Returns
     -------
     upper: array-like
-        upper envelope
+        Upper envelope
     lower: array-like
-        lower envelope
+        Lower envelope
     """
     if t is None:
         t = np.arange(len(y))
@@ -216,21 +222,21 @@ def get_envelope(y, t=None, delta=0., n_rep=0):
 
 
 def get_noise(y, sigma=3., niter=3):
-    """Finds the standard deviation of a white gaussian noise in the data
+    """Finds the standard deviation of a white gaussian noise in the data.
 
     Parameters
     ----------
     y: array-like
-        signal array
-    sigma: float, optional (default=3.0)
-        sigma_clip value
-    niter: int, optional (default=3)
-        number of iterations for k-sigma clipping
+        Signal array.
+    sigma: float, optional
+        sigma_clip value (defaults to 3.0).
+    niter: int, optional
+        Number of iterations for k-sigma clipping (defaults to 3).
 
     Returns
     -------
     noise: float
-        estimate of standard deviation of the noise
+        Estimate of standard deviation of the noise.
     """
     residue = y - signal.medfilt(y, 3)
     sd = np.std(residue)
@@ -244,19 +250,19 @@ def get_noise(y, sigma=3., niter=3):
 
 
 def gaussian(mu, sd):
-    """Simple 1D Gaussian function generator
+    """Simple 1D Gaussian function generator.
 
     Parameters
     ----------
     mu: float
-        mean
+        Mean.
     sd: float
-        standard deviation
+        Standard deviation.
 
     Returns
     -------
-    f: function
-        1D Gaussian with given parameters
+    pdf: function
+        1D Gaussian PDF with given parameters.
     """
     def pdf(x):
         z = (x - mu) / sd
@@ -265,18 +271,18 @@ def gaussian(mu, sd):
 
 
 def smooth(y, kernel):
-    """Wrap to numpy.convolve
+    """Wrap to `numpy.convolve`
 
     Parameters
     ----------
     y: array-like
-        input noisy signal
+        Input signal to be filtered.
     kernel: array-like
-        FIR filter to smooth the signal
+        FIR filter to smooth the signal.
     Returns
     -------
     yf: array-like
-        Smoothed signal
+        Smoothed signal.
     """
     w = kernel.shape[0]
     s = np.concatenate((y[w - 1:0:-1], y, y[-2:-w - 1:-1]))
@@ -286,25 +292,25 @@ def smooth(y, kernel):
 
 
 def filt(x, lo, hi, fs, order=5):
-    """Implements a band-pass IIR butterworth filter
+    """Implements a band-pass IIR butterworth filter.
 
     Parameters
     ----------
     x: array-like
-        input signal to be filtered
+        Input signal to be filtered.
     lo: float
-        lower cutoff frequency
+        Lower cutoff frequency.
     hi: float
-        higher cutoff frequency
+        Higher cutoff frequency.
     fs: float
-        sampling frequency of signal
-    order: int (optional default=5)
-        order of the butterworth filter
+        Sampling frequency of signal.
+    order: int, optional
+        Order of the butterworth filter. Default is 5.
 
     Returns
     -------
     xf: array-like
-        filtered signal
+        Filtered signal.
     """
     nyq = .5 * fs
     lo /= nyq
@@ -318,27 +324,28 @@ def acf_harmonic_quality(t, x, p_min=None, periods=None, a=1, b=2, n=8):
     """Calculates the ACF quality of band-pass filtered versions of the signal.
 
     t: array-like
-        time array
+        Time array.
     x: array-like
-        signal array
-    pmin: float (optional)
-        lower cutoff period to filter signal
-    periods: list (optional)
-        list of higher cutoff periods to filter signal
-        Will only consider periods between `pmin` and half the baseline
-    a, b, n: floats (optional)
-        if `periods` is not given then it assumes the first `n` powers of `b` scaled by `a`:
-            periods = a * b ** np.arange(n)
-        defaults are a=1, b=2, n=8
+        Signal array.
+    p_min: float, optional
+        Lower cutoff period to filter signal.
+    periods: list, optional
+        List of higher cutoff periods to filter signal.
+        Only periods between `p_min` and half the baseline will be considered.
+    a, b, n: float, optional
+        If `periods` is not given, then the first `n` powers of `b` scaled
+        by `a` will be used:
+
+        ``periods = a * b ** np.arange(n)``
 
     Returns
     -------
     ps: list
-        highest peaks (best periods) for each filtered version
+        Highest peaks (best periods) for each filtered version.
     hs: list
-        maximum heights for each filtered version
+        Maximum heights for each filtered version.
     qs: list
-        quality factor of each best period
+        Quality factor of each best period.
     """
     if periods is None:
         periods = a * b ** np.arange(n)

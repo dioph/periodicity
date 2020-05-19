@@ -3,11 +3,36 @@ from autograd import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import linregress
 
-from .utils import gaussian, acf_harmonic_quality, get_noise, acf, find_peaks
+from .utils import gaussian, acf_harmonic_quality
+
+__all__ = ['GPModeler', 'FastGPModeler', 'StrongGPModeler',
+           'make_gaussian_prior']
 
 
 class GPModeler(object):
-    """Abstract class implementing common functions for a GP Model"""
+    """Abstract class implementing common functions for a GP Model
+
+    Parameters
+    ----------
+    t: array-like
+        Time array.
+    x: array-like
+        Signal array.
+
+    Attributes
+    ----------
+    prior: function
+        A function with a single parameter `log_p` which returns the prior
+        probability on the logarithm of the period.
+        By default it is uniform within the specified bounds.
+    gp
+        Gaussian Process object with `compute`, `log_likelihood`,
+        `set_parameter_vector` and `get_parameter_vector` methods implemented.
+    mu, sd: tuple
+        Means and standard deviations of gaussian priors on the hyperparameters.
+    bounds: dict
+        Lower and upper bounds on the values of the hyperparameters.
+    """
     def __init__(self, t, x):
         self.t = np.array(t, float)
         self.x = np.array(x, float)
@@ -91,14 +116,14 @@ class GPModeler(object):
 
         Returns
         -------
-        t: array-like
-            5000 uniform time samples within modeler time array
-        mu: array-like
-            predicted mean function with maximum likelihood hyperparameters
-        sd: array-like
-            predicted error at each sample with maximum likelihood hyperparameters
+        t: ndarray[5000,]
+            Uniform time samples within modeler time array.
+        mu: ndarray[5000,]
+            Predicted mean function with ML hyperparameters.
+        sd: ndarray[5000,]
+            Predicted error at each sample with ML hyperparameters.
         v: list
-            maximum likelihood hyperparameters
+            ML (maximum likelihood) hyperparameters.
         """
         if self.t.size > 10_000:
             raise ValueError(f"Don't forget to decimate before minimizing! "
@@ -120,19 +145,22 @@ class GPModeler(object):
 
         Parameters
         ----------
-        nwalkers: int (optional default=50)
-            number of walkers
-        nsteps: int (optional default=1000)
-            number of steps taken by each walker
-        burn: int (optional default=0)
-            number of burn-in samples to remove from the beginning of the simulation
-        useprior: bool (optional default=False)
-            whether to sample from the prior distribution or use a ball centered at the current hyperparameter vector
+        n_walkers: int, optional
+            Number of walkers (the default is 50).
+        n_steps: int, optional
+            Number of steps taken by each walker (the default is 1000).
+        burn: int, optional
+            Number of burn-in samples to remove from the beginning of the
+            simulation (the default is 0).
+        use_prior: bool, optional
+            Whether to start walkers by sampling from the prior distribution.
+            The default is False, in which case a ball centered
+            at the current hyperparameter vector is used.
 
         Returns
         -------
-        samples: array-like
-            resulting samples of the posterior distribution of the hyperparameters
+        samples: ndarray[n_walkers * (n_steps - burn), n_dim]
+            Samples of the posterior hyperparameter distribution.
         """
         n_dim = len(self.gp)
         sampler = emcee.EnsembleSampler(n_walkers, n_dim, self.ln_prob)
@@ -278,37 +306,50 @@ class TensorGPModeler(GPModeler):
 
 def make_gaussian_prior(t, x, p_min=None, periods=None, a=1, b=2, n=8,
                         fundamental_height=0.8, fundamental_width=0.1):
-    """Generates a weighted sum of Gaussians as a probability prior on the
-    signal period.
+    """Generates a weighted sum of Gaussian PDFs as a probability prior on the
+    logarithm of the signal period.
 
-    Based on Angus et al. (2018) MNRAS 474, 2094A
+    Based on [#]_
 
     Parameters
     ----------
     t: array-like
-        time array
+        Time array.
     x: array-like
-        input (quasi-)periodic signal
-    pmin: float (optional)
-        lower cutoff period to filter signal
-    periods: list (optional)
-        list of higher cutoff periods to filter signal
-    a, b, n: floats (optional)
-        if ``periods`` is not given then it assumes the first `n` powers of `b` scaled by `a`:
-            `periods = a * b ** np.arange(n)`
-        defaults are a=1, b=2, n=8
-    fundamental_height: float (optional)
-        weight of the gaussian mixture on the fundamental peak
-        the *2 and /2 harmonics get equal weights (1-fundamental_height)/2
-        default=0.8
-    fundamental_width: float (optional)
-        width of the gaussians in the prior
-        default=0.1
+        Input (quasi-)periodic signal.
+    p_min: float, optional
+        Lower cutoff period to filter signal.
+    periods: list, optional
+        List of higher cutoff periods to filter signal.
+        Only periods between `p_min` and half the baseline will be considered.
+    a, b, n: float, optional
+        If `periods` is not given, then the first `n` powers of `b` scaled
+        by `a` will be used:
+
+        ``periods = a * b ** np.arange(n)``
+    fundamental_height: float, optional
+        Weight of the gaussian mixture on the fundamental peak.
+        The double and half harmonics both are equally weighted
+        ``(1 - fundamental_height) / 2``.
+        Defaults to 0.8.
+    fundamental_width: float, optional
+        Width (standard deviation) of the gaussian PDFs in the prior.
+        Defaults to 0.1.
 
     Returns
     -------
     gaussian_prior: function
-        prior on logP
+        prior on the log-period
+
+    See Also
+    --------
+    periodicity.utils.acf_harmonic_quality
+
+    References
+    ----------
+    .. [#] R. Angus, T. Morton, S. Aigrain, D. Foreman-Mackey, V. Rajpaul,
+       "Inferring probabilistic stellar rotation periods using Gaussian
+       processes," MNRAS, February 2018.
     """
     ps, hs, qs = acf_harmonic_quality(t, x, p_min, periods, a, b, n)
 

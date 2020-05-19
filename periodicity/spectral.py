@@ -5,46 +5,51 @@ import pywt
 
 from .utils import find_extrema, find_zero_crossings, get_envelope, fill_gaps
 
+__all__ = ['lombscargle', 'window', 'wavelet', 'emd', 'hht']
+
 
 def lombscargle(t, x, dx=None, f0=None, fmax=None, n=5,
                 fap_method=None, fap_level=None, psd=False):
-    """Computes the generalized Lomb-Scargle periodogram of a discrete signal x(t)
+    """Computes the generalized Lomb-Scargle periodogram of a discrete signal.
 
     Parameters
     ----------
     t: array-like
-        time array
+        Time array.
     x: array-like
-        signal array
-    dx: array-like (optional)
-        measurement uncertainties for each sample
-    f0: float (optional default=0)
-        minimum frequency
-    fmax: float (optional)
-        maximum frequency
-        If None is given, defaults to the pseudo-Nyquist limit
-    n: float (optional default=5)
-        samples per peak
-    fap_method: string {None, 'baluev', 'bootstrap'}
-        the approximation method to use for highest peak FAP and false alarm levels
-        None by default
-    fap_level: array-like (optional)
-        false alarm probabilities to approximate heights
-    psd: bool (optional)
-        whether to leave periodogram unnormalized (Fourier Spectral Density)
+        Signal array.
+    dx: array-like, optional
+        Measurement uncertainties for each sample.
+    f0: float, optional
+        Minimum frequency.
+        If not given, it will be determined from the time baseline.
+    fmax: float, optional
+        Maximum frequency.
+        If not given, defaults to the pseudo-Nyquist limit.
+    n: float, optional
+        Samples per peak (default is 5).
+    fap_method: {None, 'baluev', 'bootstrap'}
+        The approximation method to use for the highest peak FAP and
+        false alarm levels. The default is None, in which case the FAP
+        is not calculated.
+    fap_level: array-like, optional
+        List of false alarm probabilities for which you want to calculate
+        approximate levels. Can also be passed as a single scalar value.
+    psd: bool, optional
+        Whether to leave periodogram non-normalized (Fourier Spectral Density).
 
     Returns
     -------
     ls: astropy.timeseries.LombScargle object
-        the full object for the given dataset
-    f: array-like
-        frequency array
-    a: array-like
-        power array
+        The full object for the given data.
+    f: ndarray
+        Frequency array.
+    a: ndarray
+        Power array.
     fap: float
-        false alarm probability of highest peak
+        If `fap_method` is given, the False Alarm Probability of highest peak.
     fal: float
-        false alarm level for a given FAP
+        If `fap_level` is given, the power level for the given probabilities.
     """
     if psd:
         ls = LombScargle(t, x, dy=dx, normalization='psd')
@@ -69,20 +74,20 @@ def lombscargle(t, x, dx=None, f0=None, fmax=None, n=5,
 
 
 def window(t, n=5):
-    """Computes the periodogram of the window function
+    """Computes the periodogram of the window function.
 
     Parameters
     ----------
     t: array-like
-        times of sampling comb window
-    n: float (optional default=5)
-        samples per peak
+        Timestamps of the sampling comb window.
+    n: float, optional
+        Samples per peak (default is 5).
     Returns
     -------
-    f: array-like
-        frequency array
-    a : array-like
-        power array
+    f: ndarray
+        Frequency array.
+    a: ndarray
+        Power array.
     """
     ls = LombScargle(t, 1, fit_mean=False, center_data=False)
     f, a = ls.autopower(minimum_frequency=0, samples_per_peak=n)
@@ -90,25 +95,25 @@ def window(t, n=5):
 
 
 def wavelet(t, x, periods):
-    """Wavelet Power Spectrum using Morlet wavelets
+    """Wavelet Power Spectrum using Morlet wavelets.
 
     Parameters
     ----------
     t: array-like
-        Time array
+        Time array.
     x: array-like
-        Signal array
+        Signal array.
     periods: array-like
-        Periods to use, in the same units as ``t``
+        Periods to consider, in the same units as `t`.
 
     Returns
     -------
-    power: array
+    power: ndarray[len(t), len(periods)]
         Wavelet Power Spectrum.
-    coi: tuple
-        Samples for plotting the Cone of Influence boundaries.
-    mask_coi: array
-        True inside the COI, same shape as ``power``.
+    coi: tuple of ndarray
+        Time and scale samples for plotting the Cone of Influence boundaries.
+    mask_coi: ndarray[len(t), len(periods)]
+        Boolean mask with the same shape as `power`; it is True inside the COI.
     """
     dt = float(np.median(np.diff(t)))
     scales = pywt.scale2frequency('morl', 1) * np.asarray(periods) / dt
@@ -149,34 +154,42 @@ def emd(x, t=None, max_iter=2000, theta_1=0.05, theta_2=0.50,
         alpha=0.05, delta=0., n_rep=2):
     """Empirical Mode Decomposition
 
-    G. Rilling, P. Flandrin, P. Gonçalves, June 2003
-    'On Empirical Mode Decomposition and its Algorithms'
-    IEEE-EURASIP Workshop on Nonlinear Signal and Image Processing
-
     Parameters
     ----------
     x: array-like
-        signal
+        Signal.
     t: array-like, optional
-        signal timestamps
-    maxiter: int, optional (default=2000)
-        maximum number of sifting iterations
-    theta_1: float, optional (default=0.05)
-        lower threshold for the evaluation function
-    theta_2: float, optional (default=0.50)
-        upper threshold for the evaluation function (typically 10 * theta_1)
-    alpha: float, optional (default=0.05)
-        fraction of total duration where the evaluation function is allowed to be theta_1 < sigma < theta_2
+        Signal timestamps. If not given, integer indices will be used.
+    max_iter: int, optional
+        Maximum number of sifting iterations (the default is 2000).
+    theta_1: float, optional
+        Lower threshold for the evaluation function (the default is 0.05).
+    theta_2: float, optional
+        Upper threshold for the evaluation function (usually ``10 * theta_1``).
+    alpha: float, optional
+        Fraction of total duration where the evaluation function is allowed to
+        be ``theta_1 < sigma < theta_2`` (the default is 0.05).
     delta: float, optional
-        peak prominence to use when searching for local extrema
-    nbsym: int, optional (default=2)
-        number of extrema to repeat on either side of the signal while interpolating envelopes
+        Peak prominence to be used when searching for local extrema.
+    n_rep: int, optional
+        Number of extrema to repeat on either side of the signal while
+        interpolating envelopes (the default is 2).
 
     Returns
     -------
-    imfs: list of arrays
-        list of intrinsic mode functions obtained through the decomposition.
-        the last element corresponds to the residue.
+    imfs: list of ndarray
+        List of intrinsic mode functions obtained through the decomposition.
+        The last element corresponds to the monotonic residue.
+
+    Notes
+    -----
+    This algorithm is described in [#]_.
+
+    References
+    ----------
+    .. [#] G. Rilling, P. Flandrin, P. Gonçalves, "On Empirical Mode
+       Decomposition and its Algorithms," IEEE-EURASIP Workshop on Nonlinear
+       Signal and Image Processing, June 2003.
     """
     imfs = []
     n_ext = len(x)
@@ -219,15 +232,25 @@ def hht(t, x, ts=None, **kwargs):
 
     Parameters
     ----------
-    t:
-    x:
-    ts:
-    kwargs:
+    t: array-like
+        Time array.
+    x: array-like
+        Signal array.
+    ts: float, optional
+        Sampling period. If omitted, it will be estimated from `t`.
+    **kwargs: dict
+        Keyword arguments to be used by `emd`.
 
     Returns
     -------
-    f:
-    a:
+    f: list of ndarray
+        Instantaneous frequency array for each intrinsic mode.
+    a: list of ndarray
+        Signal amplitude envelope for each intrinsic mode.
+
+    See Also
+    --------
+    emd: Empirical Mode Decomposition
     """
     f, a = [], []
     t, x = fill_gaps(t, x, ts)

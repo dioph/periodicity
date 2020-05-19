@@ -1,30 +1,38 @@
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 
+__all__ = ['stringlength', 'pdm', 'pdm2']
+
 
 def stringlength(t, x, dphi=0.1, n_periods=1000, s=0):
-    """String Length
-    (Dworetsky 1983, MNRAS, 203, 917)
+    """String Length [#]_.
 
     Parameters
     ----------
     t: array-like
-        time array
+        Time array.
     x: array-like
-        signal array
-    dphi: float (optional default=0.1)
-        factor to multiply (1 / baseline) in order to get frequency separation
-    n_periods: int (optional default=1000)
-        number of trial periods
-    s: int (optional)
-        standard deviation of Gaussian filter used to smooth, measured in samples
+        Signal array.
+    dphi: float, optional
+        Factor to multiply (1 / baseline) in order to get the frequency
+        separation (the default is 0.1).
+    n_periods: int, optional
+        Number of trial periods (the default is 1000).
+    s: int, optional
+        Standard deviation of Gaussian filter used to smooth,
+        measured in samples.
 
     Returns
     -------
-    periods: array-like
-        trial periods
-    ell: array-like
-        string length for each period
+    periods: ndarray[n_periods]
+        Trial periods.
+    ell: ndarray[n_periods]
+        String length for each period.
+
+    References
+    ----------
+    .. [#] M. M. Dworetsky, "A period-finding method for sparse randomly spaced
+       observations or 'How long is a piece of string ?'," MNRAS, June 1983.
     """
     # scale x to range from -0.25 to +0.25
     x = (x - np.max(x)) / (2 * (np.max(x) - np.min(x))) - 0.25
@@ -47,32 +55,37 @@ def stringlength(t, x, dphi=0.1, n_periods=1000, s=0):
 
 
 def pdm(t, x, nb=5, nc=2, pmin=.01, pmax=10, n_periods=1000, s=0):
-    """Phase Dispersion Minimization
-    (Stellingwerf 1978, ApJ, 224, 953)
+    """Phase Dispersion Minimization [#]_.
 
     Parameters
     ----------
     t: array-like
-        time array
+        Time array.
     x: array-like
-        signal array
-    nb: int (optional default=5)
-        number of phase bins
-    nc: int (optional default=2)
-        number of covers per bin
-    pmin, pmax: floats (optional defaults=0.01 and 10)
-        minimum/maximum trial period normalized by the baseline
-    n_periods: int (optional default=1000)
-        number of trial periods
-    s: int (optional)
-        standard deviation of Gaussian filter used to smooth, measured in samples
+        Signal array.
+    nb: int, optional
+        Number of phase bins (the default is 5).
+    nc: int, optional
+        Number of covers per bin (the default is 2).
+    pmin, pmax: float, optional
+        Minimum/maximum trial period normalized by the baseline.
+    n_periods: int, optional
+        Number of trial periods (the default is 1000).
+    s: int, optional
+        Standard deviation of Gaussian filter used to smooth,
+        measured in samples.
 
     Returns
     -------
-    periods: array-like
-        trial periods
-    theta: array-like
-        phase dispersion statistic as in Eq. 3 of the paper
+    periods: ndarray[n_periods]
+        Trial periods.
+    theta: ndarray[n_periods]
+        Phase dispersion statistic as in Eq. 3 of the paper.
+
+    References
+    ----------
+    .. [#] R. F. Stellingwerf, "Period determination using phase dispersion
+       minimization," ApJ, September 1978.
     """
     t = np.asarray(t)
     x = np.asarray(x)
