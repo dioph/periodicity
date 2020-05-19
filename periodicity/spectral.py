@@ -56,7 +56,8 @@ def lombscargle(t, x, dx=None, f0=None, fmax=None, n=5,
         fmax = fs / 2
     f, a = ls.autopower(samples_per_peak=n, minimum_frequency=f0, maximum_frequency=fmax)
     if fap_method is not None:
-        assert fap_method in ['baluev', 'bootstrap'], "Unknown FAP method {}".format(fap_method)
+        if fap_method not in ['baluev', 'bootstrap']:
+            raise ValueError(f"Unknown FAP method {fap_method}.")
         fap = ls.false_alarm_probability(a.max(), method=fap_method, minimum_frequency=f0,
                                          maximum_frequency=fmax, samples_per_peak=n)
         if fap_level is not None:
@@ -144,8 +145,8 @@ def wavelet(t, x, periods):
 # TODO: check out Supersmoother (Reimann 1994)
 
 
-def emd(x, t=None, maxiter=2000, theta_1=0.05, theta_2=0.50,
-        alpha=0.05, delta=0., nbsym=2):
+def emd(x, t=None, max_iter=2000, theta_1=0.05, theta_2=0.50,
+        alpha=0.05, delta=0., n_rep=2):
     """Empirical Mode Decomposition
 
     G. Rilling, P. Flandrin, P. Gonçalves, June 2003
@@ -178,20 +179,20 @@ def emd(x, t=None, maxiter=2000, theta_1=0.05, theta_2=0.50,
         the last element corresponds to the residue.
     """
     imfs = []
-    ner = len(x)
+    n_ext = len(x)
     residue = x.copy()
-    while ner > 2:
+    while n_ext > 2:
         mode = residue.copy()
         stop = False
-        k = 0
-        while not stop and k < maxiter:
+        it = 0
+        while not stop and it < max_iter:
             maxima, minima = find_extrema(mode, delta=delta)
             zeroes = find_zero_crossings(mode, delta=delta)
-            ner = len(maxima) + len(minima)
-            nzm = len(zeroes)
-            k += 1
+            n_ext = len(maxima) + len(minima)
+            n_zero = len(zeroes)
+            it += 1
             try:
-                upper, lower = get_envelope(mode, t, delta=delta, nbsym=nbsym)
+                upper, lower = get_envelope(mode, t, delta=delta, n_rep=n_rep)
                 mu = (upper + lower) / 2
                 amp = (upper - lower) / 2
                 sigma = np.abs(mu / amp)
@@ -200,9 +201,9 @@ def emd(x, t=None, maxiter=2000, theta_1=0.05, theta_2=0.50,
                 # sigma < theta_2 for the remaining fraction
                 stop = stop and np.all(sigma < theta_2)
                 # the number of extrema and the number of zero-crossings must differ at most by 1
-                stop = stop and (np.abs(nzm - ner) <= 1)
+                stop = stop and (np.abs(n_zero - n_ext) <= 1)
                 # if there are not enough extrema, the current mode is a monotonic residue
-                stop = stop or (ner < 3)
+                stop = stop or (n_ext < 3)
             except TypeError:
                 stop = True
                 mu = np.zeros_like(mode)

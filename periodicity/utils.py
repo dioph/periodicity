@@ -5,7 +5,8 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import minimize
 
 
-def acf(y, t=None, maxlag=None, s=0, fill=False):
+
+def acf(y, t=None, max_lag=None, s=0, fill=False):
     """Auto-Correlation Function implemented using IFFT of the power spectrum.
 
     Parameters
@@ -37,20 +38,20 @@ def acf(y, t=None, maxlag=None, s=0, fill=False):
 
     n = len(y)
 
-    if maxlag is None:
-        maxlag = n
+    if max_lag is None:
+        max_lag = n
 
-    if type(maxlag) is float:
-        maxlag = np.where(t - np.min(t) <= maxlag)[0][-1] + 1
+    if type(max_lag) is float:
+        max_lag = np.where(t - np.min(t) <= max_lag)[0][-1] + 1
 
     f = np.fft.fft(y - y.mean(), n=2 * n)
-    ryy = np.fft.ifft(f * np.conjugate(f))[:maxlag].real
+    ryy = np.fft.ifft(f * np.conjugate(f))[:max_lag].real
 
     if s > 0:
         ryy = gaussian_filter1d(ryy, sigma=s, truncate=3.0)
 
     ryy /= ryy[0]
-    lags = t[:maxlag] - np.min(t[:maxlag])
+    lags = t[:max_lag] - np.min(t[:max_lag])
 
     return lags, ryy
 
@@ -74,9 +75,9 @@ def fill_gaps(t, y, ts=None):
     """
     if ts is None:
         ts = float(np.median(np.diff(t)))
-    tnew = np.arange(np.min(t), np.max(t), ts)
-    ynew = interpolate.interp1d(t, y)(tnew)
-    return tnew, ynew
+    t_new = np.arange(np.min(t), np.max(t), ts)
+    y_new = interpolate.interp1d(t, y)(t_new)
+    return t_new, y_new
 
 
 def find_peaks(y, t=None, delta=0.):
@@ -154,14 +155,15 @@ def find_zero_crossings(y, height=None, delta=0.):
         zero-crossing indices
     """
     if height is None:
-        indzer, = np.where(np.diff(np.signbit(y)))
+        ind_zer, = np.where(np.diff(np.signbit(y)))
     else:
-        indzer, _ = signal.find_peaks(-np.abs(y), height=-height, prominence=delta)
-    return indzer
+        ind_zer, _ = signal.find_peaks(-np.abs(y), height=-height,
+                                       prominence=delta)
+    return ind_zer
 
 
-def get_envelope(y, t=None, delta=0., nbsym=0):
-    """Interpolates maxima and minima with cubic splines to derive upper and lower envelopes.
+def get_envelope(y, t=None, delta=0., n_rep=0):
+    """Interpolates maxima/minima with cubic splines into upper/lower envelopes.
 
     Parameters
     ----------
@@ -185,30 +187,30 @@ def get_envelope(y, t=None, delta=0., nbsym=0):
         t = np.arange(len(y))
 
     peaks, dips = find_extrema(y, delta)
-    if nbsym == 0:
+    if n_rep == 0:
         peaks = np.r_[0, peaks, len(y) - 1]
-        tmax = t[peaks]
-        ymax = y[peaks]
+        t_max = t[peaks]
+        y_max = y[peaks]
         dips = np.r_[0, peaks, len(y) - 1]
-        tmin = t[dips]
-        ymin = y[dips]
+        t_min = t[dips]
+        y_min = y[dips]
     else:
-        lpeaks = peaks[:nbsym][::-1]
-        rpeaks = peaks[-nbsym:][::-1]
-        loff = 2 * t[0] - t[lpeaks]
-        roff = 2 * t[-1] - t[rpeaks]
-        tmax = np.r_[loff, t[peaks], roff]
-        ymax = np.r_[y[lpeaks], y[peaks], y[rpeaks]]
-        ldips = dips[:nbsym][::-1]
-        rdips = dips[-nbsym:][::-1]
-        loff = 2 * t[0] - t[ldips]
-        roff = 2 * t[-1] - t[rdips]
-        tmin = np.r_[loff, t[dips], roff]
-        ymin = np.r_[y[ldips], y[dips], y[rdips]]
+        l_peaks = peaks[:n_rep][::-1]
+        r_peaks = peaks[-n_rep:][::-1]
+        l_off = 2 * t[0] - t[l_peaks]
+        r_off = 2 * t[-1] - t[r_peaks]
+        t_max = np.r_[l_off, t[peaks], r_off]
+        y_max = np.r_[y[l_peaks], y[peaks], y[r_peaks]]
+        l_dips = dips[:n_rep][::-1]
+        r_dips = dips[-n_rep:][::-1]
+        l_off = 2 * t[0] - t[l_dips]
+        r_off = 2 * t[-1] - t[r_dips]
+        t_min = np.r_[l_off, t[dips], r_off]
+        y_min = np.r_[y[l_dips], y[dips], y[r_dips]]
 
-    tck = interpolate.splrep(tmax, ymax)
+    tck = interpolate.splrep(t_max, y_max)
     upper = interpolate.splev(t, tck)
-    tck = interpolate.splrep(tmin, ymin)
+    tck = interpolate.splrep(t_min, y_min)
     lower = interpolate.splev(t, tck)
     return upper, lower
 
@@ -230,13 +232,13 @@ def get_noise(y, sigma=3., niter=3):
     noise: float
         estimate of standard deviation of the noise
     """
-    resid = y - signal.medfilt(y, 3)
-    sd = np.std(resid)
-    index = np.arange(resid.size)
+    residue = y - signal.medfilt(y, 3)
+    sd = np.std(residue)
+    index = np.arange(residue.size)
     for i in range(niter):
-        mu = np.mean(resid[index])
-        sd = np.std(resid[index])
-        index, = np.where(np.abs(resid - mu) < sigma * sd)
+        mu = np.mean(residue[index])
+        sd = np.std(residue[index])
+        index, = np.where(np.abs(residue - mu) < sigma * sd)
     noise = sd / .893421
     return noise
 
@@ -256,11 +258,10 @@ def gaussian(mu, sd):
     f: function
         1D Gaussian with given parameters
     """
-
-    def f(x):
-        return 1 / (np.sqrt(2 * np.pi) * sd) * np.exp(-.5 * ((x - mu) / sd) ** 2)
-
-    return f
+    def pdf(x):
+        z = (x - mu) / sd
+        return np.exp(-z * z / 2.0) / np.sqrt(2.0 * np.pi) / sd
+    return pdf
 
 
 def smooth(y, kernel):
@@ -313,8 +314,8 @@ def filt(x, lo, hi, fs, order=5):
     return xf
 
 
-def acf_harmonic_quality(t, x, pmin=None, periods=None, a=1, b=2, n=8):
-    """Calculates the quality of the ACF of a band-pass filtered version of the signal
+def acf_harmonic_quality(t, x, p_min=None, periods=None, a=1, b=2, n=8):
+    """Calculates the ACF quality of band-pass filtered versions of the signal.
 
     t: array-like
         time array
@@ -342,36 +343,39 @@ def acf_harmonic_quality(t, x, pmin=None, periods=None, a=1, b=2, n=8):
     if periods is None:
         periods = a * b ** np.arange(n)
     fs = 1 / float(np.median(np.diff(t)))
-    if pmin is None:
-        pmin = max(np.min(periods) / 10, 3 / fs)
+    if p_min is None:
+        p_min = max(np.min(periods) / 10, 3 / fs)
     t -= np.min(t)
-    periods = np.array([pi for pi in periods if pmin < pi < np.max(t) / 2])
+    periods = np.array([pi for pi in periods if p_min < pi < np.max(t) / 2])
     ps = []
     hs = []
     qs = []
-    for pi in periods:
-        xf = filt(x, 1 / pi, 1 / pmin, fs)
-        ml = np.where(t >= 2 * pi)[0][0]
-        lags, rxx = acf(xf, t, maxlag=ml)
-        if pi >= 20:
-            rxx = smooth(rxx, Box1DKernel(width=pi // 10))
+    for p_max in periods:
+        xf = filt(x, 1 / p_max, 1 / p_min, fs)
+        ml = np.where(t >= 2 * p_max)[0][0]
+        lags, rxx = acf(xf, t, max_lag=ml)
+        if p_max >= 20:
+            rxx = smooth(rxx, Box1DKernel(width=p_max // 10))
         try:
             peaks, heights = find_peaks(rxx, lags)
-            bp_acf = peaks[np.argmax(heights)][0]
+            per = peaks[np.argmax(heights)][0]
         except Exception:
             continue
-        ps.append(bp_acf)
+        ps.append(per)
         hs.append(np.max(heights))
-        tau_max = 20 * pi / bp_acf
+        tau_max = 20 * p_max / per
 
-        def eps(params):
-            acf_model = params[0] * np.exp(-lags / params[1]) * np.cos(2 * np.pi * lags / bp_acf)
+        def rss(params):
+            aa, tt = params
+            if tt < 0:
+                return 1e300
+            acf_model = aa * np.exp(-lags / tt) * np.cos(2 * np.pi * lags / per)
             return np.sum(np.square(rxx - acf_model))
 
-        results = minimize(fun=eps, x0=np.array([1., bp_acf * 2]))
+        results = minimize(fun=rss, x0=np.array([1., per * 2]))
         amp, tau = results.x
         tau = min(tau, tau_max)
-        ri = eps(results.x)
-        qs.append((tau / bp_acf) * (ml * hs[-1] / ri))
+        ri = rss(results.x)
+        qs.append((tau / per) * (ml * hs[-1] / ri))
 
     return ps, hs, qs

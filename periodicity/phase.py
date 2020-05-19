@@ -43,7 +43,6 @@ def stringlength(t, x, dphi=0.1, n_periods=1000, s=0):
     ell = np.array(ell)
     if s > 0:
         ell = gaussian_filter1d(ell, sigma=s, truncate=3.0)
-
     return periods, ell
 
 
@@ -100,7 +99,6 @@ def pdm(t, x, nb=5, nc=2, pmin=.01, pmax=10, n_periods=1000, s=0):
     theta = np.array(theta)
     if s > 0:
         theta = gaussian_filter1d(theta, sigma=s, truncate=3.0)
-
     return periods, theta
 
 
@@ -139,7 +137,6 @@ def pdm2(t, x, pmin=None, pmax=None, n_periods=None, s=0,
     periods = periods[::-1]
     if s > 0:
         thetas = gaussian_filter1d(thetas, sigma=s, truncate=3.0)
-
     return periods, thetas
 
 # TODO: Analysis of Variance (Schwarzenberg-Czerny 1989)
