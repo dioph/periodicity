@@ -30,3 +30,11 @@ Gaussian Processes
     :undoc-members:
     :private-members:
     :show-inheritance:
+
+Other useful functions
+======================
+.. automodule:: periodicity.utils
+    :members:
+    :undoc-members:
+    :private-members:
+    :show-inheritance:
