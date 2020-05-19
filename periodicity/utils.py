@@ -279,7 +279,7 @@ def smooth(y, kernel):
         Smoothed signal
     """
     w = kernel.shape[0]
-    s = np.r_[y[w - 1:0:-1], y, y[-2:-w - 1:-1]]
+    s = np.concatenate((y[w - 1:0:-1], y, y[-2:-w - 1:-1]))
     sf = np.convolve(s, kernel, mode='valid')
     yf = sf[w // 2 - 1:-w // 2]
     return yf
