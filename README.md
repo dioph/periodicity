@@ -1,6 +1,10 @@
 # Periodicity
 
-Useful tools for analysis of periodicities in time series data.
+Useful tools for periodicity analysis in time series data.
+
+[![](https://github.com/dioph/periodicity/workflows/periodicity-tests/badge.svg)](https://github.com/dioph/periodicity/actions?query=branch%3Amaster)
+[![PyPI version](https://badge.fury.io/py/periodicity.svg)](https://badge.fury.io/py/periodicity)
+[![Downloads](https://pepy.tech/badge/periodicity)](https://pepy.tech/project/periodicity)
 
 __Documentation: https://periodicity.readthedocs.io__
 
@@ -20,15 +24,9 @@ Currently includes:
     * `pymc3` implementation (soon™)
 
 ## Quick start
-### Installing current release from pypi (v0.1.0b2)
+### Installing current release from PyPI (v1.0b1)
     $ pip install periodicity
-### Installing current development version (v1.0b1)
+### Installing current development version (v1.0b2)
     $ git clone https://github.com/dioph/periodicity.git
     $ cd periodicity
     $ pip install .
-
-### Visualization of this example:
-
-![gp_example](https://raw.githubusercontent.com/dioph/periodicity/master/docs/source/_static/images/example2.png)
-
-![gp_example](https://raw.githubusercontent.com/dioph/periodicity/master/docs/source/_static/images/example1.png)
