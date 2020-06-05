@@ -2,7 +2,7 @@
 
 Useful tools for periodicity analysis in time series data.
 
-[![](https://github.com/dioph/periodicity/workflows/periodicity-tests/badge.svg)](https://github.com/dioph/periodicity/actions?query=branch%3Amaster)
+[![](https://github.com/dioph/periodicity/workflows/CI/badge.svg)](https://github.com/dioph/periodicity/actions?query=branch%3Amaster)
 [![PyPI version](https://badge.fury.io/py/periodicity.svg)](https://badge.fury.io/py/periodicity)
 [![Downloads](https://pepy.tech/badge/periodicity)](https://pepy.tech/project/periodicity)
 

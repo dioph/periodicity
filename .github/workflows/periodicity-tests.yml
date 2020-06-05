@@ -1,4 +1,4 @@
-name: periodicity-tests
+name: CI
 
 on:
   push:
