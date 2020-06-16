@@ -23,10 +23,9 @@ Currently includes:
     * `celerite` implementation
     * `pymc3` implementation (soon™)
 
-## Quick start
-### Installing current release from PyPI (v1.0b1)
-    $ pip install periodicity
-### Installing current development version (v1.0b2)
-    $ git clone https://github.com/dioph/periodicity.git
-    $ cd periodicity
-    $ pip install .
+## Installation
+
+The latest version is available to download via PyPI: __`pip install periodicity`__.
+
+Alternatively, you can build the current development version from source by cloning this repo (__`git clone https://github.com/dioph/periodicity.git`__) and running __`pip install ./periodicity`__.
+
