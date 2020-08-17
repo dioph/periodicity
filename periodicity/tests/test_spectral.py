@@ -12,9 +12,13 @@ class LombScargleTest(unittest.TestCase):
         time = np.arange(0, t0+ts, ts)
         signal = np.random.normal(1, 0.1, time.size)
         ls, freq, power = lombscargle(time, signal, n=1)
+        # frequencies are sorted
         self.assertListEqual(sorted(freq), list(freq))
+        # minimum frequency corresponds to a half-cycle within the baseline
         self.assertEqual(f0 / 2, freq[0])
+        # maximum frequency is half the sampling rate
         self.assertAlmostEqual(fs / 2, freq[-1])
+        # uniform grid with spacing equal to f0
         self.assertLess(np.max(np.abs(np.diff(freq) - f0)), 1e-10)
 
     def test_can_find_periods(self):

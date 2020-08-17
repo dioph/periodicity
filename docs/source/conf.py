@@ -3,6 +3,7 @@
 
 import glob
 import os
+import sys
 import subprocess
 
 import sphinx_rtd_theme
@@ -14,7 +15,7 @@ for fn in glob.glob("_static/notebooks/*.ipynb"):
     name = os.path.splitext(os.path.split(fn)[1])[0]
     outfn = os.path.join("tutorials", name + ".rst")
     subprocess.check_call(
-        "jupyter nbconvert --template template --to rst "
+        sys.executable + " -m jupyter nbconvert --template template --to rst "
         + fn
         + " --output-dir tutorials",
         shell=True

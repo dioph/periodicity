@@ -39,6 +39,7 @@ Initial beta release
     :caption: Tutorials
 
     tutorials/wavelet
+    tutorials/fastgp
 
 
 
