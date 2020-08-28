@@ -9,7 +9,7 @@ __all__ = ['acf', 'fill_gaps', 'find_peaks', 'find_extrema',
            'smooth', 'filt', 'acf_harmonic_quality']
 
 
-def acf(y, t=None, max_lag=None, s=0, fill=False):
+def acf(y, t=None, max_lag=None, s=0, fill=False, do_corr=False):
     """Auto-Correlation Function implemented using IFFT of the power spectrum.
 
     Parameters
@@ -20,13 +20,17 @@ def acf(y, t=None, max_lag=None, s=0, fill=False):
         Time array. If not given, integer indices will be used.
     max_lag: int or float, optional
         Maximum lag to compute ACF.
-        If given as a float, will be assumed to be a measure of time and the ACF
-        will be computed for lags lower than or equal to `max_lag`.
+        If given as a float, will be assumed to be a measure of time and the
+        ACF will be computed for lags lower than or equal to `max_lag`.
     s: int, optional
         Standard deviation of Gaussian filter used to smooth ACF,
         measured in samples.
     fill: bool, optional
         Whether to use linear interpolation to sample signal uniformly.
+    do_corr: bool, optional
+        Whether to correct for the "mask effect" (dividing Ryy by the ACF of a
+        signal equal to 1 on the original domain of y and equal to 0 on the
+        padding's domain).
 
     Returns
     -------
@@ -44,13 +48,21 @@ def acf(y, t=None, max_lag=None, s=0, fill=False):
     n = len(y)
 
     if max_lag is None:
-        max_lag = n
+        max_lag = n // 2
 
     if type(max_lag) is float:
         max_lag = np.where(t - np.min(t) <= max_lag)[0][-1] + 1
 
     f = np.fft.fft(y - y.mean(), n=2 * n)
-    ryy = np.fft.ifft(f * np.conjugate(f))[:max_lag].real
+    ryy = np.fft.ifft(f * np.conjugate(f))
+
+    mask = np.fft.fft(np.ones_like(y), n=2 * n)
+    correction = np.fft.ifft(mask * np.conjugate(mask))
+
+    if do_corr:
+        ryy /= correction
+
+    ryy = np.real(ryy[:max_lag])
 
     if s > 0:
         ryy = gaussian_filter1d(ryy, sigma=s, truncate=3.0)
@@ -184,9 +196,9 @@ def get_envelope(y, t=None, delta=0., n_rep=0):
 
     Returns
     -------
-    upper: array-like
+    upper: ndarray
         Upper envelope
-    lower: array-like
+    lower: ndarray
         Lower envelope
     """
     if t is None:
@@ -309,7 +321,7 @@ def filt(x, lo, hi, fs, order=5):
 
     Returns
     -------
-    xf: array-like
+    xf: ndarray
         Filtered signal.
     """
     nyq = .5 * fs
@@ -323,6 +335,8 @@ def filt(x, lo, hi, fs, order=5):
 def acf_harmonic_quality(t, x, p_min=None, periods=None, a=1, b=2, n=8):
     """Calculates the ACF quality of band-pass filtered versions of the signal.
 
+    Parameters
+    ----------
     t: array-like
         Time array.
     x: array-like
