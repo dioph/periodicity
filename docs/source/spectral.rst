@@ -12,13 +12,23 @@ The basics: Fourier analysis
 The Lomb-Scargle periodogram
 ============================
 
+Wavelet analysis
+================
+
+Hilbert-Huang Transform
+=======================
+
+Empirical Mode Decomposition (EMD)
+----------------------------------
+
 Comparisons between the methods
 ===============================
 
 A summary of the comparison between Fourier, Wavelet, and HHT analyses is given in the following table:
 
 +----------------------+------------------+-----------------------+-----------------------+
-|                      | **Fourier**      | **Wavelet**           | **Hilbert**           |
+|                      | **Fourier**      | **Continuous**        | **Hilbert**           |
+|                      |                  | **Wavelet**           |                       |
 +----------------------+------------------+-----------------------+-----------------------+
 | **Basis**            | a priori         | a priori              | adaptive              |
 +----------------------+------------------+-----------------------+-----------------------+
@@ -32,8 +42,8 @@ A summary of the comparison between Fourier, Wavelet, and HHT analyses is given 
 +----------------------+------------------+-----------------------+-----------------------+
 | **Non-stationary**   | no               | yes                   | yes                   |
 +----------------------+------------------+-----------------------+-----------------------+
-| **Feature**          | no               | discrete: no,         | yes                   |
-| **extraction**       |                  | continuous: yes       |                       |
+| **Feature**          | no               | yes                   | yes                   |
+| **extraction**       |                  |                       |                       |
 +----------------------+------------------+-----------------------+-----------------------+
 | **Theoretical base** | theory complete  | theory complete       | empirical             |
 |                      |                  |                       |                       |
