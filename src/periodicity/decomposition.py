@@ -286,8 +286,6 @@ class CEEMDAN(object):
 
             # Averages the ensemble of trials for the next mode
             mu = 0
-            maxit = 0
-            minit = np.inf
             if self.cores is not None:
                 with Pool(self.cores) as pool:
                     tasks = [
@@ -304,19 +302,10 @@ class CEEMDAN(object):
                     )
                 for i in ensemble:
                     noise_modes = white_noise_modes[i]
-                    noisy_residue = residue.copy()
-                    if len(noise_modes) > k:
-                        beta = self.epsilon * np.std(residue.val)
-                        if k == 0:
-                            beta /= np.std(noise_modes[k].val)
-                        noisy_residue += beta * noise_modes[k]
-                    mode = self.emd(noisy_residue, max_modes=1)[0]
-                    iters = self.emd.iters[0]
-                    maxit = max(maxit, iters)
-                    minit = min(minit, iters)
-                    if progress:
-                        ensemble.set_postfix_str(f"sifts: {minit:>3d} - {maxit:<3d}")
-                    mu += (noisy_residue - mode) / self.ensemble_size
+                    mu += (
+                        self._realization((noise_modes, k, residue))
+                        / self.ensemble_size
+                    )
             imfs.append(residue - mu)
             residue = mu.copy()
 
