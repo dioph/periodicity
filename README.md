@@ -9,15 +9,21 @@ Useful tools for periodicity analysis in time series data.
 __Documentation: https://periodicity.readthedocs.io__
 
 Currently includes:
-* Auto-Correlation Function
+* Auto-Correlation Function (and other general timeseries utilities!)
 * Spectral methods:
     * Lomb-Scargle periodogram
+    * Bayesian Lomb-Scargle with linear Trend (soon™)
+* Time-frequency methods (WIP):
     * Wavelet Transform
-    * Hilbert-Huang Transform (WIP)
+    * Hilbert-Huang Transform
 * Phase-folding methods:
     * String Length
     * Phase Dispersion Minimization
     * Analysis of Variance (soon™)
+* Decomposition methods:
+    * Empirical Mode Decomposition
+    * Local Mean Decomposition
+    * Variational Mode Decomposition (soon™)
 * Gaussian Processes:
     * `george` implementation
     * `celerite` implementation
@@ -29,3 +35,8 @@ The latest version is available to download via PyPI: __`pip install periodicity
 
 Alternatively, you can build the current development version from source by cloning this repo (__`git clone https://github.com/dioph/periodicity.git`__) and running __`pip install ./periodicity`__.
 
+## Development
+
+If you're interested in contributing to periodicity, install __pipenv__ and you can setup everything you need with __`pipenv install --dev`__.
+
+To automatically test the project (and also check formatting, coverage, etc.), simply run __`tox`__ within the project's directory.
