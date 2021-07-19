@@ -29,9 +29,9 @@ Initial beta release
     :maxdepth: 2
     :caption: User Guide
 
-    spectral
-    phase
-    gp
+    guide/spectral
+    guide/phase
+    guide/gp
     api
 
 .. toctree::

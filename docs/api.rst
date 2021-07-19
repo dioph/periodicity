@@ -31,9 +31,27 @@ Gaussian Processes
     :private-members:
     :show-inheritance:
 
+Time-Frequency methods
+======================
+
+.. automodule:: periodicity.timefrequency
+    :members:
+    :undoc-members:
+    :private-members:
+    :show-inheritance:
+
+Decomposition methods
+=====================
+
+.. automodule:: periodicity.decomposition
+    :members:
+    :undoc-members:
+    :private-members:
+    :show-inheritance:
+
 Other useful functions
 ======================
-.. automodule:: periodicity.utils
+.. automodule:: periodicity.signal
     :members:
     :undoc-members:
     :private-members:
