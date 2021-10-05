@@ -1,10 +1,12 @@
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pywt
 from scipy.signal import hilbert
 
-from .core import Periodogram, Timeseries
-from .decomposition import EMD, _lmd_sift
+from .core import TFSeries, TSeries
+from .decomposition import EMD, LMD
 
 __all__ = ["WPS", "HHT"]
 
@@ -12,7 +14,48 @@ __all__ = ["WPS", "HHT"]
 class HHT(object):
     """Hilbert-Huang Transform"""
 
-    def __init__(self, emd=None, method="DQ", norm_type="spline", norm_iter=10):
+    def __init__(
+        self,
+        frequencies,
+        emd=None,
+        method="DQ",
+        norm_type="spline",
+        norm_iter=10,
+        smooth_width=None,
+    ):
+        """
+        Parameters
+        ----------
+        frequencies: array-like
+            The frequency grid on which to project the representation.
+        emd: callable, optional
+            The decomposition used to extract AM-FM modes from the signal.
+            It must accept a TSeries object as input and return a list of TSeries.
+            If not given, a EMD with default settings is used.
+        method: str, optional
+            Method of instant frequency determination. Should be one of
+
+            - 'DQ' (default): Direct Quadrature
+            - 'NHT': Normalized Hilbert Transform
+            - 'TEO': Teager Energy Operator
+            - 'HT': Hilbert Transform
+        norm_type: str, optional
+            Type of amplitude normalization, used in 'DQ' and 'NHT'. Should be one of
+
+            - 'hilbert': absolute value of analytic signal
+            - 'spline' (default): cubic spline interpolation of maxima
+            - 'lmd': local mean decomposition (single iteration)
+        norm_iter: int, optional
+            Number of normalization iterations, used to test for convergence.
+            The normalized FM mode is clipped to unit amplitude after this many
+            iterations if necessary. Default is 10.
+        smooth_width: int, optional
+            Width (standard deviation) of a gaussian FIR filter used to smooth the
+            calculatd instantaneous frequencies and amplitudes.
+        """
+        self.frequencies = frequencies
+        if np.any(np.diff(frequencies) < 0):
+            self.frequencies.sort()
         if emd is None:
             emd = EMD()
         self.emd = emd
@@ -23,84 +66,86 @@ class HHT(object):
             raise ValueError(f"Method {norm_type} is unknown.")
         self.norm_type = norm_type.lower()
         self.norm_iter = norm_iter
+        self.smooth_width = smooth_width
 
-    def _normalize(self, imf, eps=1e-6, n_rep=2):
+    def _normalize(self, mode, eps=1e-6, pad_width=2):
         """Huang et al. (2009)"""
-        F = imf.copy()
+        F = mode.copy()
         A = 1.0
         for it in range(self.norm_iter):
             if self.norm_type == "hilbert":
-                env = np.abs(hilbert(F.val))
+                env = np.abs(hilbert(F.values))
             elif self.norm_type == "spline":
-                env, _ = F.abs().get_envelope(n_rep=n_rep)
+                env, _ = np.abs(F).get_envelope(pad_width=pad_width)
             elif self.norm_type == "lmd":
-                mu, env = _lmd_sift(F, n_rep=n_rep)
-                F -= mu
-            F /= env
-            A *= env
-            if np.max(np.abs(F.val)) - 1.0 < eps:
+                lmd = LMD(pad_width=pad_width)
+                mu, env = lmd.sift(F)
+                F = F - mu
+            F = F / env
+            A = A * env
+            if np.max(np.abs(F)) - 1.0 < eps:
                 break
-        F.val[F.val > 1.0] = 1.0
-        F.val[F.val < -1.0] = -1.0
+        F.values = np.clip(F.values, -1.0, 1.0)
         return A, F
 
+    def _spectrogram(self, freq_grid, freq, amp):
+        tshape = len(freq)
+        fshape = len(freq_grid)
+        power = np.zeros((fshape, tshape), float)
+        f_bins = np.clip(np.searchsorted(freq_grid, freq), 0, fshape - 1)
+        power[f_bins, np.arange(tshape)] += amp
+        power[[0, -1]] = 0
+        return TFSeries(time=self.signal.time, frequency=freq_grid, values=power)
+
     def __call__(self, signal):
-        if not isinstance(signal, Timeseries):
-            signal = Timeseries(val=signal)
+        if not isinstance(signal, TSeries):
+            signal = TSeries(values=signal)
+        self.signal = signal
         f, a = [], []
-        imfs = self.emd(signal)
-        for imf in imfs:
-            if np.any(imf):
+        tfs = []
+        modes = self.emd(signal)
+        for mode in modes:
+            if np.any(mode):
                 if self.method == "DQ":
-                    A, F = self._normalize(imf)
-                    amp = A.val
-                    phi = np.arctan2(np.sqrt(1 - F.val ** 2), F.val)
+                    A, F = self._normalize(mode)
+                    amp = A.values
+                    phi = np.arctan2(np.sqrt(1 - F.values ** 2), F.values)
                     corr = np.sign(np.gradient(phi))
                     phi = np.unwrap(phi * corr)
                     freq = np.gradient(phi, F.time)
                     freq /= 2 * np.pi
                 elif self.method == "NHT":
-                    A, F = self._normalize(imf)
-                    amp = A.val
-                    phi = np.unwrap(np.angle(hilbert(F.val)))
+                    A, F = self._normalize(mode)
+                    amp = A.values
+                    phi = np.unwrap(np.angle(hilbert(F.values)))
                     freq = np.gradient(phi, F.time)
                     freq /= 2 * np.pi
                 elif self.method == "TEO":
-                    teo_x = signal.TEO.val
-                    teo_xdot = signal.derivative.TEO.val
+                    teo_x = signal.TEO.values
+                    teo_xdot = signal.derivative.TEO.values
                     amp = teo_x / np.sqrt(teo_xdot)
                     freq = np.sqrt(teo_xdot / teo_x)
                     freq /= 2 * np.pi
                 elif self.method == "HT":
-                    analytic = hilbert(self.val)
+                    analytic = hilbert(signal.values)
                     amp = np.abs(analytic)
                     phi = np.unwrap(np.angle(analytic))
-                    freq = np.gradient(phi, self.time)
+                    freq = np.gradient(phi, signal.time)
                     freq /= 2 * np.pi
-                f.append(Timeseries(signal.time, freq))
-                a.append(Timeseries(signal.time, amp))
-        self.signal = signal
-        self.imfs = imfs
-        self.freqs = f
-        self.amps = a
-        return f, a
-
-    def spectrogram(self, freqs, smooth_freq=None, smooth_amp=None):
-        tshape = len(self.signal)
-        fshape = len(freqs)
-        power = np.zeros((fshape, tshape), float)
-        for i in range(len(self.freqs)):
-            freq = self.freqs[i]
-            amp = self.amps[i]
-            if smooth_freq is not None:
-                freq = freq.smooth(smooth_freq)
-            if smooth_amp is not None:
-                amp = amp.smooth(smooth_amp)
-            for i in range(tshape):
-                j = np.argmin(np.abs(freq[i].val - freqs))
-                if 0 < j < fshape - 1:
-                    power[j, i] += amp[i].val
-        return power
+                freq = TSeries(signal.time, freq)
+                amp = TSeries(signal.time, amp)
+                if self.smooth_width is not None:
+                    freq = freq.smooth(self.smooth_width)
+                    amp = amp.smooth(self.smooth_width)
+                f.append(freq)
+                a.append(amp)
+                tfs.append(self._spectrogram(self.frequencies, freq.values, amp.values))
+        self.modes = modes
+        self.instant_fs = f
+        self.instant_as = a
+        self.tfs = tfs
+        self.tf = sum(tfs)
+        return self.tf
 
 
 def denoise(data, family="db4", sigma=None, detrend=False):
@@ -133,6 +178,7 @@ class WPS(object):
 
     def __init__(self, periods):
         self.periods = np.asarray(periods)
+        self.frequency = 1.0 / self.periods
 
     def __call__(self, signal):
         """Computes the WPS of the signal for the given periods.
@@ -154,13 +200,13 @@ class WPS(object):
         -------
         spectrum: ndarray[len(periods), len(signal)]
         """
-        if not isinstance(signal, Timeseries):
-            signal = Timeseries(val=signal)
+        if not isinstance(signal, TSeries):
+            signal = TSeries(values=signal)
 
         n_times = signal.size
         n_scales = self.periods.size
         family = "cmor2.0-1.0"
-        dt = signal.median_ts
+        dt = signal.median_dt
         scales = pywt.scale2frequency(family, 1) * self.periods / dt
 
         # Chooses the method with the lowest computational complexity
@@ -171,15 +217,21 @@ class WPS(object):
         else:
             method = "conv"
         self.coefs, _ = pywt.cwt(
-            signal.val - signal.val.mean(), scales, family, dt, method=method
+            signal.values - signal.mean(), scales, family, dt, method=method
         )
 
         # Defines useful attributes
-        self.power = np.square(np.abs(self.coefs))
+        power = np.square(np.abs(self.coefs))
+        unbiased_power = (power.T / scales).T
         self.signal = signal
         self.time = signal.time
         self.scales = scales
-        self.spectrum = (self.power.T / self.scales).T
+        self.power = TFSeries(time=self.time, frequency=self.frequency, values=power)
+        self.spectrum = TFSeries(
+            time=self.time, frequency=self.frequency, values=unbiased_power
+        )
+        self.masked_spectrum = self.spectrum.copy()
+        self.masked_spectrum.values[~self.mask_coi] = np.nan
         return self.spectrum
 
     def coi(self, coi_samples=100):
@@ -188,7 +240,7 @@ class WPS(object):
             Number of samples of the Cone of Influence (COI).
             Used for plotting (default is 100).
         """
-        corr = 2 ** 0.5
+        corr = np.exp2(0.5)
         t_max = np.max(self.time)
         t_min = np.min(self.time)
         p_max = np.max(self.periods)
@@ -199,19 +251,15 @@ class WPS(object):
         t2 = t_max - corr * p_samples
         t_samples = np.hstack((t1, t2))
         p_samples = np.hstack((p_samples, p_samples))
-        return Timeseries(t_samples, p_samples)
+        return TSeries(t_samples, p_samples)
 
     @property
     def mask_coi(self):
-        corr = 2 ** 0.5
+        corr = np.exp2(0.5)
         t_max = np.max(self.time)
         t_min = np.min(self.time)
         t_mesh, p_mesh = np.meshgrid(self.time, self.periods)
         return corr * p_mesh < np.minimum(t_mesh - t_min, t_max - t_mesh)
-
-    @property
-    def masked_spectrum(self):
-        return np.ma.masked_array(self.spectrum, ~self.mask_coi)
 
     def sav(self, pmin=None, pmax=None):
         mask = np.ones(len(self.periods), bool)
@@ -219,7 +267,7 @@ class WPS(object):
             mask &= self.periods >= pmin
         if pmax is not None:
             mask &= self.periods <= pmax
-        return Timeseries(self.time, np.mean(self.spectrum[mask], axis=0))
+        return self.spectrum[mask].mean("frequency")
 
     def masked_sav(self, pmin=None, pmax=None):
         mask = np.ones(len(self.periods), bool)
@@ -227,7 +275,9 @@ class WPS(object):
             mask &= self.periods >= pmin
         if pmax is not None:
             mask &= self.periods <= pmax
-        return Timeseries(self.time, np.mean(self.masked_spectrum[mask], axis=0))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            return self.masked_spectrum[mask].mean("frequency")
 
     def gwps(self, tmin=None, tmax=None):
         mask = np.ones(len(self.time), bool)
@@ -235,9 +285,7 @@ class WPS(object):
             mask &= self.time >= tmin
         if tmax is not None:
             mask &= self.time <= tmax
-        return Periodogram(
-            period=self.periods, val=np.mean(self.spectrum[:, mask], axis=1)
-        )
+        return self.spectrum[:, mask].mean("time")
 
     def masked_gwps(self, tmin=None, tmax=None):
         mask = np.ones(len(self.time), bool)
@@ -245,16 +293,26 @@ class WPS(object):
             mask &= self.time >= tmin
         if tmax is not None:
             mask &= self.time <= tmax
-        return Periodogram(
-            period=self.periods, val=np.mean(self.masked_spectrum[:, mask], axis=1)
-        )
-
-    def imshow(self, **kwargs):
-        plt.imshow(self.spectrum, aspect="auto", **kwargs)
-
-    def contour(self, **kwargs):
-        plt.contourf(self.time, self.periods, self.spectrum, **kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            return self.masked_spectrum[:, mask].mean("time")
 
     def plot_coi(self, coi_samples=100, **kwargs):
         coi = self.coi(coi_samples)
-        plt.fill_between(coi.time, coi.val, self.periods.max(), **kwargs)
+        plt.fill_between(coi.time, coi.values, self.periods.max(), **kwargs)
+
+
+class CompositeSpectrum(object):
+    def __init__(self, periods):
+        self.periods = periods
+        self.wps = WPS(periods)
+
+    def __call__(self, signal):
+        if not isinstance(signal, TSeries):
+            signal = TSeries(values=signal)
+        wav = self.wps(signal)
+        gwps = wav.mean("time")
+        gwps /= gwps.amax()
+        ryy = signal.fill_gaps().acf()
+        cs = gwps * np.interp(gwps.period, ryy.time, ryy.values)
+        return cs
