@@ -1,13 +1,14 @@
 import numpy as np
 
+from periodicity.core import TSeries
 from periodicity.data import SpottedStar
-from periodicity.gp import FastGPModeler, StrongGPModeler, make_gaussian_prior
+from periodicity.gp import BrownianGP, HarmonicGP, make_gaussian_prior
 
 
 def test_make_gaussian_prior_spotted_lc():
     log_periods = np.linspace(-3, 5, 1000)
     t, y, dy = SpottedStar()
-    prior = make_gaussian_prior(t, y)
+    prior = make_gaussian_prior(TSeries(t, y))
     prior_prob = prior(log_periods)
     # prior has a maximum at approx 10.7 days
     assert prior_prob.argmax() == 671
@@ -20,28 +21,35 @@ def test_make_gaussian_prior_spotted_lc():
     assert len(peaks) == 7
 
 
-def test_fastgp_constructor():
-    model = FastGPModeler([1, 2], [3, 4])
-    assert model.mu == (-17, -13, 0, 3)
-
-
-def test_fastgp_spotted_lc_minimize():
+def test_browniangp_spotted_lc_minimize():
     t, y, dy = SpottedStar()
-    model = FastGPModeler(t, y)
-    _, _, _, v = model.minimize()
-    assert np.round(np.exp(v[4]), 3) == 10.618
+    sig = TSeries(t, y)
+    model = BrownianGP(sig, err=dy)
+    soln, _ = model.minimize(model.gp)
+    opt_params = model.prior_transform(soln.x)
+    assert np.round(opt_params["period"], 2) == 9.95
 
 
-def test_fastgp_spotted_lc_mcmc():
-    np.random.seed(42)
+def test_harmonicgp_spotted_lc_minimize():
     t, y, dy = SpottedStar()
-    model = FastGPModeler(t, y)
-    model.prior = make_gaussian_prior(t, y)
-    model.minimize()
-    samples = model.mcmc(n_walkers=16, n_steps=1000, burn=100)
-    assert np.round(np.exp(np.median(samples[:, 4])), 1) == 10.6
+    sig = TSeries(t, y)
+    model = HarmonicGP(sig, err=dy)
+    soln, _ = model.minimize(model.gp)
+    opt_params = model.prior_transform(soln.x)
+    assert np.round(opt_params["period"], 2) == 11.04
 
 
-def test_stronggp_constructor():
-    model = StrongGPModeler([1, 2], [3, 4])
-    assert model.mu == (-17, -13, 5, 1.9)
+def test_browniangp_spotted_lc_mcmc():
+    t, y, dy = SpottedStar()
+    sig = TSeries(t, y)
+    model = BrownianGP(sig, err=dy)
+    trace, tau = model.mcmc(n_walkers=16, n_steps=1000, burn=100, random_seed=42)
+    assert np.round(np.median(trace["period"]), 1) == 10.0
+
+
+def test_harmonicgp_spotted_lc_mcmc():
+    t, y, dy = SpottedStar()
+    sig = TSeries(t, y)
+    model = HarmonicGP(sig, err=dy)
+    trace, tau = model.mcmc(n_walkers=16, n_steps=1000, burn=100, random_seed=42)
+    assert np.round(np.median(trace["period"]), 1) == 11.0

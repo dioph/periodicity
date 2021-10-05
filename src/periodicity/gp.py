@@ -1,11 +1,25 @@
 from autograd import numpy as np
+import celerite2
+import celerite2.theano
 import emcee
+import george
+import pymc3 as pm
+import pymc3_ext as pmx
 from scipy.optimize import minimize
-from scipy.stats import linregress
+from scipy.stats import norm
 
-from .core import Timeseries
+from .core import TSeries
 
-__all__ = ["GPModeler", "FastGPModeler", "StrongGPModeler", "make_gaussian_prior"]
+__all__ = [
+    "GeorgeModeler",
+    "CeleriteModeler",
+    "TheanoModeler",
+    "QuasiPeriodicGP",
+    "BrownianGP",
+    "HarmonicGP",
+    "BrownianTheanoGP",
+    "HarmonicTheanoGP",
+]
 
 
 def _gaussian(mu, sd):
@@ -31,301 +45,23 @@ def _gaussian(mu, sd):
     return pdf
 
 
-class GPModeler(object):
-    """Abstract class implementing common functions for a GP Model
+def make_ppf(x, pdf):
+    cdf = np.cumsum(pdf)
+    cdf /= cdf[-1]
 
-    Parameters
-    ----------
-    t: array-like
-        Time array.
-    x: array-like
-        Signal array.
+    def ppf(q):
+        icdf = np.interp(q, cdf, x)
+        return icdf
 
-    Attributes
-    ----------
-    prior: function
-        A function with a single parameter `log_p` which returns the prior
-        probability on the logarithm of the period.
-        By default it is uniform within the specified bounds.
-    gp
-        Gaussian Process object with `compute`, `log_likelihood`,
-        `set_parameter_vector` and `get_parameter_vector` methods implemented.
-    mu, sd: tuple
-        Means and standard deviations of gaussian priors on the hyperparameters.
-    bounds: dict
-        Lower and upper bounds on the values of the hyperparameters.
-    """
-
-    def __init__(self, t, x):
-        self.t = np.array(t, float)
-        self.x = np.array(x, float)
-
-        def uniform_prior(log_p):
-            window = np.logical_and(
-                self.bounds["log_P"][0] < log_p, log_p < self.bounds["log_P"][1]
-            )
-            prob = np.ones_like(log_p)
-            prob[~window] = 0.0
-            return prob
-
-        a, b = linregress(self.t, self.x)[:2]
-        self.x -= a * self.t + b
-
-        self.prior = uniform_prior
-        self.gp = None
-        self.mu = ()
-        self.bounds = dict()
-        self.sd = ()
-
-    def ln_like(self, p):
-        """Log-likelihood function."""
-        self.gp.set_parameter_vector(p)
-        self.gp.compute(self.t)
-        ll = self.gp.log_likelihood(self.x, quiet=True)
-        return ll
-
-    def ln_prior(self, p):
-        """Log-prior function."""
-        priors = [_gaussian(self.mu[i], self.sd[i]) for i in range(len(self.mu))] + [
-            self.prior
-        ]
-        for i, (lo, hi) in enumerate(self.bounds.values()):
-            if not (lo < p[i] < hi):
-                return -np.inf
-        lp = np.sum([np.log(priors[i](p[i])) for i in range(len(p))])
-        return lp
-
-    def sample_prior(self, n_samples):
-        """Sample from the prior distribution."""
-        n_dim = len(self.gp)
-        samples = np.inf * np.ones((n_samples, n_dim))
-        m = np.ones(n_samples, dtype=bool)
-        n_bad = m.sum()
-        while n_bad > 0:
-            samples[m, :-1] = np.random.normal(
-                self.mu, self.sd, size=(n_bad, n_dim - 1)
-            )
-            samples[m, -1] = self.sample_period(n_bad)
-            lp = np.array([self.ln_prior(p) for p in samples])
-            m = ~np.isfinite(lp)
-            n_bad = m.sum()
-        return samples
-
-    def sample_period(self, n_samples):
-        """Sample log-periods from its prior distribution."""
-        log_p_min, log_p_max = self.bounds["log_P"]
-        log_p = np.linspace(log_p_min, log_p_max, 1000)
-        prob = self.prior(log_p)
-        prob /= prob.sum()
-        samples = np.random.choice(log_p, n_samples, p=prob)
-        return samples
-
-    def ln_prob(self, p):
-        """Log-posterior function."""
-        self.gp.set_parameter_vector(p)
-        lp = self.ln_prior(p)
-        if not np.isfinite(lp):
-            return -np.inf
-        return lp + self.ln_like(p)
-
-    def nll(self, p, x):
-        """Negative log-likelihood."""
-        self.gp.set_parameter_vector(p)
-        return -self.gp.log_likelihood(x)
-
-    def grad_nll(self, p, x):
-        """Gradient of the negative log-likelihood."""
-        raise NotImplementedError
-
-    def minimize(self):
-        """Minimizes negative log-likelihood function within bounds.
-
-        Returns
-        -------
-        t: ndarray[5000,]
-            Uniform time samples within modeler time array.
-        mu: ndarray[5000,]
-            Predicted mean function with ML hyperparameters.
-        sd: ndarray[5000,]
-            Predicted error at each sample with ML hyperparameters.
-        v: list
-            ML (maximum likelihood) hyperparameters.
-        """
-        if self.t.size > 10_000:
-            raise ValueError(
-                f"Don't forget to decimate before minimizing! " f"(N={self.t.size})"
-            )
-        self.gp.compute(self.t)
-        p0 = self.gp.get_parameter_vector()
-        results = minimize(
-            fun=self.nll,
-            x0=p0,
-            args=self.x,
-            method="L-BFGS-B",
-            jac=self.grad_nll,
-            bounds=self.bounds.values(),
-        )
-        self.gp.set_parameter_vector(results.x)
-        self.gp.compute(self.t)
-        t = np.linspace(self.t.min(), self.t.max(), 5000)
-        mu, var = self.gp.predict(self.x, self.t, return_var=True)
-        sd = np.sqrt(var)
-        return t, mu, sd, results.x
-
-    def mcmc(self, n_walkers=50, n_steps=1000, burn=0, use_prior=False):
-        """Samples the posterior probability distribution with a Markov Chain
-        Monte Carlo simulation.
-
-        Parameters
-        ----------
-        n_walkers: int, optional
-            Number of walkers (the default is 50).
-        n_steps: int, optional
-            Number of steps taken by each walker (the default is 1000).
-        burn: int, optional
-            Number of burn-in samples to remove from the beginning of the
-            simulation (the default is 0).
-        use_prior: bool, optional
-            Whether to start walkers by sampling from the prior distribution.
-            The default is False, in which case a ball centered
-            at the current hyperparameter vector is used.
-
-        Returns
-        -------
-        samples: ndarray[n_walkers * (n_steps - burn), n_dim]
-            Samples of the posterior hyperparameter distribution.
-        """
-        n_dim = len(self.gp)
-        sampler = emcee.EnsembleSampler(n_walkers, n_dim, self.ln_prob)
-        # TODO: multi-threading
-        p = self.gp.get_parameter_vector()
-        if use_prior:
-            p0 = self.sample_prior(n_walkers)
-        else:
-            p0 = p + 1e-5 * np.random.randn(n_walkers, n_dim)
-        sampler.run_mcmc(p0, n_steps, progress=True)
-        samples = sampler.get_chain(discard=burn, flat=True)
-        return samples
-
-
-class FastGPModeler(GPModeler):
-    """Model based on a Sum of Exponentials kernel (fast but not so strong)"""
-
-    def __init__(
-        self,
-        t,
-        x,
-        log_sigma=-17,
-        log_b=-13,
-        log_c=0,
-        log_l=3,
-        log_p=2,
-        bounds=None,
-        sd=None,
-    ):
-        import celerite
-
-        class CustomTerm(celerite.terms.Term):
-            """Custom sum of exponentials kernel"""
-
-            parameter_names = ("log_b_", "log_c_", "log_l_", "log_p_")
-
-            def get_real_coefficients(self, params):
-                log_b_, log_c_, log_l_, log_p_ = params
-                a = np.exp(log_b_)
-                b = np.exp(log_c_)
-                c = np.exp(-log_l_)
-                return a * (1.0 + b) / (2.0 + b), c
-
-            def get_complex_coefficients(self, params):
-                log_b_, log_c_, log_l_, log_p_ = params
-                a = np.exp(log_b_)
-                b = np.exp(log_c_)
-                c = np.exp(-log_l_)
-                return a / (2.0 + b), 0.0, c, 2 * np.pi * np.exp(-log_p_)
-
-        super(FastGPModeler, self).__init__(t, x)
-        self.mu = (log_sigma, log_b, log_c, log_l)
-        if bounds is None:
-            bounds = {
-                "log_sigma": (-20, 0),
-                "log_B": (-20, 0),
-                "log_C": (-5, 5),
-                "log_L": (1.5, 5.0),
-                "log_P": (-0.69, 4.61),
-            }
-        self.bounds = bounds
-        if sd is None:
-            sd = (5.0, 5.7, 2.0, 0.7)
-        self.sd = sd
-        term = celerite.terms.JitterTerm(log_sigma=log_sigma)
-        term += CustomTerm(
-            log_b_=log_b, log_c_=log_c, log_l_=log_l, log_p_=log_p, bounds=bounds
-        )
-        self.gp = celerite.GP(term)
-
-    def grad_nll(self, p, x):
-        self.gp.set_parameter_vector(p)
-        return -self.gp.grad_log_likelihood(x)[1]
-
-
-class StrongGPModeler(GPModeler):
-    """GP Model based on Quasi-Periodic kernel (strong but not so fast)"""
-
-    def __init__(
-        self,
-        t,
-        x,
-        log_sigma=-17,
-        log_a=-13,
-        log_l=5,
-        log_g=1.9,
-        log_p=2,
-        bounds=None,
-        sd=None,
-    ):
-        import george
-
-        super(StrongGPModeler, self).__init__(t, x)
-        self.mu = (log_sigma, log_a, log_l, log_g)
-        if bounds is None:
-            bounds = {
-                "log_sigma": (-20, 0),
-                "log_A": (-20, 0),
-                "log_L": (2, 8),
-                "log_G": (0, 3),
-                "log_P": (-0.69, 4.61),
-            }
-        self.bounds = bounds
-        if sd is None:
-            sd = (5.0, 5.7, 1.2, 1.4)
-        self.sd = sd
-        kernel = george.kernels.ConstantKernel(log_a, bounds=[bounds["log_A"]])
-        kernel *= george.kernels.ExpSquaredKernel(
-            np.exp(log_l), metric_bounds=[bounds["log_L"]]
-        )
-        kernel *= george.kernels.ExpSine2Kernel(
-            log_g, log_p, bounds=[bounds["log_G"], bounds["log_P"]]
-        )
-        self.gp = george.GP(
-            kernel,
-            solver=george.HODLRSolver,
-            white_noise=log_sigma,
-            fit_white_noise=True,
-        )
-
-    def grad_nll(self, p, x):
-        self.gp.set_parameter_vector(p)
-        return -self.gp.grad_log_likelihood(x)
+    return ppf
 
 
 def make_gaussian_prior(
-    t,
-    x,
+    signal,
     p_min=None,
     periods=None,
-    a=1,
-    b=2,
+    a=1.0,
+    b=2.0,
     n=8,
     fundamental_height=0.8,
     fundamental_width=0.1,
@@ -337,9 +73,7 @@ def make_gaussian_prior(
 
     Parameters
     ----------
-    t: array-like
-        Time array.
-    x: array-like
+    signal: TSeries or array-like
         Input (quasi-)periodic signal.
     p_min: float, optional
         Lower cutoff period to filter signal.
@@ -375,33 +109,436 @@ def make_gaussian_prior(
        "Inferring probabilistic stellar rotation periods using Gaussian
        processes," MNRAS, February 2018.
     """
-    sig = Timeseries(t, x)
+    if not isinstance(signal, TSeries):
+        signal = TSeries(data=signal)
     if periods is None:
         periods = a * b ** np.arange(n)
     if p_min is None:
-        p_min = max(np.min(periods) / 10, 3 * sig.median_ts)
-    periods = np.array([pi for pi in periods if p_min < pi < sig.baseline / 2])
+        p_min = max(np.min(periods) / 10, 3 * signal.median_dt)
+    periods = np.array([p for p in periods if p_min < p < signal.baseline / 2])
     ps, hs, qs = [], [], []
     for p_max in periods:
-        pi, hi, qi = sig.acf_period_quality(p_min, p_max)
-        ps.append(pi)
-        hs.append(hi)
-        qs.append(qi)
+        p, h, q = signal.acf_period_quality(p_min, p_max)
+        ps.append(p)
+        hs.append(h)
+        qs.append(q)
 
     def gaussian_prior(log_p):
         tot = 0
         fh = fundamental_height
         hh = (1 - fh) / 2
         fw = fundamental_width
-        for pi, qi in zip(ps, qs):
-            qi = max(qi, 0)
-            gaussian1 = _gaussian(np.log(pi), fw)
-            gaussian2 = _gaussian(np.log(pi / 2), fw)
-            gaussian3 = _gaussian(np.log(2 * pi), fw)
-            tot += qi * (
+        for p, q in zip(ps, qs):
+            q = max(q, 0)
+            gaussian1 = _gaussian(np.log(p), fw)
+            gaussian2 = _gaussian(np.log(p / 2), fw)
+            gaussian3 = _gaussian(np.log(2 * p), fw)
+            tot += q * (
                 fh * gaussian1(log_p) + hh * gaussian2(log_p) + hh * gaussian3(log_p)
             )
         tot /= np.sum(qs)
         return tot
 
     return gaussian_prior
+
+
+class GeorgeModeler(object):
+    def __init__(self, signal, err, init_period=None, period_prior=None):
+        if not isinstance(signal, TSeries):
+            signal = TSeries(data=signal)
+        self.signal = signal
+        self.err = err
+        self.t = self.signal.time
+        self.y = self.signal.values
+        self.sigma = np.std(self.y)
+        self.jitter = np.min(self.err) ** 2
+        self.mean = np.mean(self.y)
+        if init_period is None:
+            init_period = np.sqrt(signal.size) * signal.median_dt
+        if period_prior is None:
+
+            def period_prior(u):
+                sigma_period = 0.2 * np.log(signal.size)
+                return np.exp(norm.ppf(u, np.log(init_period), sigma_period))
+
+        self.period_prior = period_prior
+        self.gp = george.GP(
+            self.kernel,
+            solver=george.HODLRSolver,
+            mean=self.mean,
+            fit_mean=True,
+            white_noise=np.log(self.jitter),
+            fit_white_noise=True,
+        )
+        self.gp.compute(self.t, yerr=self.err)
+        self.ndim = len(self.gp)
+
+    def prior_transform(self, u):
+        raise NotImplementedError("subclasses must implement this method")
+
+    def set_params(self, theta, gp):
+        gp.set_parameter_vector(theta)
+        gp.compute(self.t, yerr=self.err)
+        return gp
+
+    def get_prediction(self, time, gp):
+        mu, var = gp.predict(self.y, t=time, return_var=True)
+        sd = np.sqrt(var)
+        return mu, sd
+
+    def nll(self, u, gp):
+        """Objective function based on the Negative Log-Likelihood."""
+        theta = self.prior_transform(u)
+        gp = self.set_params(theta, gp)
+        ll = gp.log_likelihood(self.y, quiet=True)
+        return -ll if np.isfinite(ll) else 1e25
+
+    def grad_nll(self, u, gp):
+        theta = self.prior_transform(u)
+        gp = self.set_params(theta, gp)
+        return -gp.grad_log_likelihood(self.y, quiet=True)
+
+    def minimize(self, gp):
+        """Gradient-based optimization of the objective function within the unit
+        hypercube."""
+        u0 = np.full(self.ndim, 0.5)
+        bounds = [(1e-5, 1 - 1e-5) for x in u0]
+        soln = minimize(self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds)
+        opt_theta = self.prior_transform(soln.x)
+        opt_gp = self.set_params(opt_theta, gp)
+        return soln, opt_gp
+
+    def log_prob(self, u, gp):
+        """Posterior distribution over the hyperparameters."""
+        if any(u >= 1 - 1e-5) or any(u <= 1e-5):
+            return -np.inf
+        params = self.prior_transform(u)
+        gp = self.set_params(params, gp)
+        ll = gp.log_likelihood(self.y)
+        return ll
+
+    def mcmc(
+        self, n_walkers=50, n_steps=1000, burn=0, use_prior=False, random_seed=None
+    ):
+        """Samples the posterior probability distribution with a Markov Chain
+        Monte Carlo simulation.
+
+        Parameters
+        ----------
+        n_walkers: int, optional
+            Number of walkers (the default is 50).
+        n_steps: int, optional
+            Number of steps taken by each walker (the default is 1000).
+        burn: int, optional
+            Number of burn-in samples to remove from the beginning of the
+            simulation (the default is 0).
+        use_prior: bool, optional
+            Whether to start walkers by sampling from the prior distribution.
+            The default is False, in which case a ball centered
+            at the MLE hyperparameter vector is used.
+
+        Returns
+        -------
+        samples: ndarray[n_dim, n_walkers * (n_steps - burn)]
+            Samples of the posterior hyperparameter distribution.
+        """
+        rng = np.random.default_rng(random_seed)
+        np.random.seed(random_seed)
+        if use_prior:
+            u0 = rng.random((n_walkers, self.ndim))
+        else:
+            soln, opt_gp = self.minimize(self.gp)
+            u0 = soln.x + 1e-5 * rng.standard_normal((n_walkers, self.ndim))
+        # TODO: multi-threading
+        sampler = emcee.EnsembleSampler(
+            n_walkers, self.ndim, self.log_prob, args=(self.gp,)
+        )
+        sampler.run_mcmc(u0, n_steps, progress=True)
+        samples = sampler.get_chain(discard=burn, flat=True)
+        tau = sampler.get_autocorr_time(discard=burn, quiet=True)
+        trace = np.vstack(self.prior_transform(samples.T))
+        self.sampler = sampler
+        return trace, tau
+
+
+class QuasiPeriodicGP(GeorgeModeler):
+    def __init__(self, signal, err, init_period=None, period_prior=None):
+        kernel = george.kernels.ConstantKernel(np.var(signal))
+        kernel *= george.kernels.ExpSquaredKernel(10.0)
+        kernel *= george.kernels.ExpSine2Kernel(4.5, 0.0)
+        self.kernel = kernel
+        super().__init__(signal, err, init_period, period_prior)
+
+    def prior_transform(self, u):
+        period = self.period_prior(u[5])
+        mean = norm.ppf(u[0], self.mean, 10.0)
+        jitter = np.exp(norm.ppf(u[1], np.log(self.jitter), 5.0))
+        sigma2 = np.exp(norm.ppf(u[2], 2 * np.log(self.sigma), 5.0))
+        tau2 = (10 ** u[3] * period) ** 2
+        gamma = np.exp(norm.ppf(u[4], 1.5, 1.5))
+        theta = [mean, jitter, sigma2, tau2, gamma, period]
+        return theta
+
+
+class CeleriteModeler(object):
+    def __init__(self, signal, err, init_period=None, period_prior=None):
+        if not isinstance(signal, TSeries):
+            signal = TSeries(data=signal)
+        self.signal = signal
+        self.err = err
+        self.t = self.signal.time
+        self.y = self.signal.values
+        self.sigma = np.std(self.y)
+        self.jitter = np.min(self.err) ** 2
+        self.mean = np.mean(self.y)
+        if init_period is None:
+            init_period = np.sqrt(signal.size) * signal.median_dt
+        if period_prior is None:
+
+            def period_prior(u):
+                sigma_period = 0.5 * np.log(signal.size)
+                return np.exp(norm.ppf(u, np.log(init_period), sigma_period))
+
+        self.period_prior = period_prior
+        init_params = self.prior_transform(np.full(self.ndim, 0.5))
+        init_params["period"] = init_period
+        mean = init_params.pop("mean")
+        jitter = init_params.pop("jitter")
+        self.gp = celerite2.GaussianProcess(self.kernel(**init_params), mean=mean)
+        self.gp.compute(self.t, diag=self.err ** 2 + jitter)
+
+    def prior_transform(self, u):
+        raise NotImplementedError("subclasses must implement this method")
+
+    def set_params(self, params, gp):
+        gp.mean = params.pop("mean")
+        jitter = params.pop("jitter")
+        gp.kernel = self.kernel(**params)
+        gp.compute(self.t, diag=self.err ** 2 + jitter, quiet=True)
+        return gp
+
+    def get_psd(self, frequency, gp):
+        return gp.kernel.get_psd(2 * np.pi * frequency)
+
+    def get_prediction(self, time, gp):
+        mu, var = gp.predict(self.y, t=time, return_var=True)
+        sd = np.sqrt(var)
+        return mu, sd
+
+    def nll(self, u, gp):
+        """Objective function based on the Negative Log-Likelihood."""
+        params = self.prior_transform(u)
+        gp = self.set_params(params, gp)
+        return -gp.log_likelihood(self.y)
+
+    def minimize(self, gp):
+        """Gradient-based optimization of the objective function within the unit
+        hypercube."""
+        u0 = np.full(self.ndim, 0.5)
+        bounds = [(1e-5, 1 - 1e-5) for x in u0]
+        soln = minimize(self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds)
+        opt_params = self.prior_transform(soln.x)
+        opt_gp = self.set_params(opt_params, gp)
+        return soln, opt_gp
+
+    def log_prob(self, u, gp):
+        if any(u >= 1 - 1e-5) or any(u <= 1e-5):
+            return -np.inf
+        params = self.prior_transform(u)
+        gp = self.set_params(params, gp)
+        ll = gp.log_likelihood(self.y)
+        return ll
+
+    def mcmc(
+        self, n_walkers=50, n_steps=1000, burn=0, use_prior=False, random_seed=None
+    ):
+        """Samples the posterior probability distribution with a Markov Chain
+        Monte Carlo simulation.
+
+        Parameters
+        ----------
+        n_walkers: int, optional
+            Number of walkers (the default is 50).
+        n_steps: int, optional
+            Number of steps taken by each walker (the default is 1000).
+        burn: int, optional
+            Number of burn-in samples to remove from the beginning of the
+            simulation (the default is 0).
+        use_prior: bool, optional
+            Whether to start walkers by sampling from the prior distribution.
+            The default is False, in which case a ball centered
+            at the MLE hyperparameter vector is used.
+
+        Returns
+        -------
+        trace: dict
+            Samples of the posterior hyperparameter distribution.
+        tau: ndarray
+            Estimated autocorrelation time of MCMC chain for each parameter.
+        """
+        rng = np.random.default_rng(random_seed)
+        np.random.seed(random_seed)
+        if use_prior:
+            u0 = rng.random((n_walkers, self.ndim))
+        else:
+            soln, opt_gp = self.minimize(self.gp)
+            u0 = soln.x + 1e-5 * rng.standard_normal((n_walkers, self.ndim))
+        sampler = emcee.EnsembleSampler(
+            n_walkers, self.ndim, self.log_prob, args=(self.gp,)
+        )
+        sampler.run_mcmc(u0, n_steps, progress=True)
+        samples = sampler.get_chain(discard=burn, flat=True)
+        tau = sampler.get_autocorr_time(discard=burn, quiet=True)
+        trace = self.prior_transform(samples.T)
+        self.sampler = sampler
+        return trace, tau
+
+
+class BrownianTerm(celerite2.terms.TermSum):
+    def __init__(self, sigma, tau, period, mix):
+        Q = 0.01
+        sigma_1 = sigma * np.sqrt(mix)
+        f = np.sqrt(1 - 4 * Q ** 2)
+        w0 = 2 * Q / (tau * (1 - f))
+        S0 = (1 - mix) * sigma ** 2 / (0.5 * w0 * Q * (1 + 1 / f))
+        super().__init__(
+            celerite2.terms.SHOTerm(sigma=sigma_1, tau=tau, rho=period),
+            celerite2.terms.SHOTerm(S0=S0, w0=w0, Q=Q),
+        )
+
+
+class BrownianGP(CeleriteModeler):
+    def __init__(self, signal, err, init_period=None, period_prior=None):
+        self.ndim = 6
+        self.kernel = BrownianTerm
+        super().__init__(signal, err, init_period, period_prior)
+
+    def prior_transform(self, u):
+        period = self.period_prior(u[3])
+        params = {
+            "mean": norm.ppf(u[0], self.mean, 10.0),
+            "sigma": np.exp(norm.ppf(u[1], np.log(self.sigma), 5.0)),
+            "tau": period * 10 ** u[2],
+            "period": period,
+            "mix": u[4] * 0.5,
+            "jitter": np.exp(norm.ppf(u[5], np.log(self.jitter), 5.0)),
+        }
+        return params
+
+
+class HarmonicGP(CeleriteModeler):
+    def __init__(self, signal, err, init_period=None, period_prior=None):
+        self.ndim = 7
+        self.kernel = celerite2.terms.RotationTerm
+        super().__init__(signal, err, init_period, period_prior)
+
+    def prior_transform(self, u):
+        period = self.period_prior(u[2])
+        params = {
+            "mean": norm.ppf(u[0], self.mean, 10.0),
+            "sigma": np.exp(norm.ppf(u[1], np.log(self.sigma), 5.0)),
+            "period": period,
+            "Q0": np.exp(norm.ppf(u[3], 1.0, 5.0)),
+            "dQ": np.exp(norm.ppf(u[4], 2.0, 5.0)),
+            "f": u[5],
+            "jitter": np.exp(norm.ppf(u[6], np.log(self.jitter), 5.0)),
+        }
+        return params
+
+
+class TheanoModeler(object):
+    def __init__(self, signal, err, init_period=None):
+        if not isinstance(signal, TSeries):
+            signal = TSeries(data=signal)
+        self.signal = signal
+        self.err = err
+        self.t = self.signal.time
+        self.y = self.signal.values
+        self.sigma = np.std(self.y)
+        self.jitter = np.min(self.err) ** 2
+        self.mean = np.mean(self.y)
+        if init_period is None:
+            init_period = np.sqrt(signal.size) * signal.median_dt
+        self.sigma_period = 0.5 * np.log(signal.size)
+        self.init_period = init_period
+
+    def mcmc(self, n_walkers=1, n_steps=2000, burn=1000, cores=1):
+        with self.model:
+            trace = pmx.sample(
+                tune=burn,
+                draws=n_steps - burn,
+                cores=cores,
+                chains=n_walkers,
+                random_seed=42,
+            )
+            self.period_samples = trace["period"]
+            return trace
+
+
+class BrownianTheanoGP(TheanoModeler):
+    def __init__(self, signal, err, init_period=None, predict_at=None, psd_at=None):
+        super().__init__(signal, err, init_period)
+        with pm.Model() as model:
+            # The mean flux of the time series
+            mean = pm.Normal("mean", mu=self.mean, sd=10.0)
+            # A jitter term describing excess white noise
+            log_jitter = pm.Normal("log_jitter", mu=np.log(self.jitter), sd=5.0)
+            # The parameters of the BrownianTerm kernel
+            sigma = pm.Lognormal("sigma", mu=np.log(self.sigma), sd=5.0)
+            period = pm.Lognormal(
+                "period", mu=np.log(self.init_period), sd=self.sigma_period
+            )
+            log_tau = pm.Uniform("log_tau", lower=0.0, upper=np.log(10))
+            tau = pm.math.exp(log_tau) * period
+            mix = pm.Uniform("mix", lower=0.0, upper=0.5)
+            Q = 0.01
+            sigma_1 = sigma * pm.math.sqrt(mix)
+            f = pm.math.sqrt(1 - 4 * Q ** 2)
+            w0 = 2 * Q / (tau * (1 - f))
+            S0 = (1 - mix) * sigma ** 2 / (0.5 * w0 * Q * (1 + 1 / f))
+            # Set up the Gaussian Process model
+            kernel1 = celerite2.theano.terms.SHOTerm(sigma=sigma_1, tau=tau, rho=period)
+            kernel2 = celerite2.theano.terms.SHOTerm(S0=S0, w0=w0, Q=Q)
+            kernel = kernel1 + kernel2
+            gp = celerite2.theano.GaussianProcess(kernel, mean=mean)
+            gp.compute(self.t, diag=self.err ** 2 + pm.math.exp(log_jitter), quiet=True)
+            gp.marginal("obs", observed=self.y)
+            if predict_at is not None:
+                pm.Deterministic("pred", gp.predict(self.y, predict_at))
+            if psd_at is not None:
+                pm.Deterministic("psd", kernel.get_psd(2 * np.pi * psd_at))
+        self.model = model
+
+
+class HarmonicTheanoGP(TheanoModeler):
+    def __init__(self, signal, err, init_period=None, predict_at=None, psd_at=None):
+        super().__init__(signal, err, init_period)
+        with pm.Model() as model:
+            # The mean flux of the time series
+            mean = pm.Normal("mean", mu=self.mean, sd=10.0)
+            # A jitter term describing excess white noise
+            log_jitter = pm.Normal("log_jitter", mu=np.log(self.jitter), sd=5.0)
+            # The parameters of the RotationTerm kernel
+            sigma = pm.Lognormal("sigma", mu=np.log(self.sigma), sd=5.0)
+            period = pm.Lognormal(
+                "period", mu=np.log(self.init_period), sd=self.sigma_period
+            )
+            Q0 = pm.Lognormal("Q0", mu=1.0, sd=5.0)
+            dQ = pm.Lognormal("dQ", mu=2.0, sd=5.0)
+            f = pm.Uniform("f", lower=0.0, upper=1.0)
+            # Set up the Gaussian Process model
+            kernel = celerite2.theano.terms.RotationTerm(
+                sigma=sigma,
+                period=period,
+                Q0=Q0,
+                dQ=dQ,
+                f=f,
+            )
+            gp = celerite2.theano.GaussianProcess(kernel, mean=mean)
+            gp.compute(self.t, diag=self.err ** 2 + pm.math.exp(log_jitter), quiet=True)
+            gp.marginal("obs", observed=self.y)
+            if predict_at is not None:
+                pm.Deterministic("pred", gp.predict(self.y, predict_at))
+            if psd_at is not None:
+                pm.Deterministic("psd", kernel.get_psd(2 * np.pi * psd_at))
+        self.model = model
