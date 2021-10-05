@@ -27,7 +27,7 @@ def test_browniangp_spotted_lc_minimize():
     model = BrownianGP(sig, err=dy)
     soln, _ = model.minimize(model.gp)
     opt_params = model.prior_transform(soln.x)
-    assert np.round(opt_params["period"], 2) == 9.95
+    assert np.round(opt_params["period"], 1) == 10.0
 
 
 def test_harmonicgp_spotted_lc_minimize():
@@ -36,7 +36,7 @@ def test_harmonicgp_spotted_lc_minimize():
     model = HarmonicGP(sig, err=dy)
     soln, _ = model.minimize(model.gp)
     opt_params = model.prior_transform(soln.x)
-    assert np.round(opt_params["period"], 2) == 11.04
+    assert np.round(opt_params["period"], 1) == 11.0
 
 
 def test_browniangp_spotted_lc_mcmc():
