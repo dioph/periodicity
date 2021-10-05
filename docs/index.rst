@@ -8,10 +8,10 @@ The latest development version can be found `here <https://github.com/dioph/peri
 Installation
 ============
 ``periodicity`` requires
-``numpy`` (for array arithmetic),
-``scipy`` (for signal processing and optimization),
-``astropy`` (for a great Lomb-Scargle periodogram implementation), and
-``emcee`` (for MCMC sampling Gaussian Processes)
+``xarray`` (for computation on labeled data),
+``celerite2`` and ``george`` (for Gaussian Process models),
+``emcee`` and  ``pymc3_ext`` (for MCMC sampling Gaussian Processes),
+and ``PyWavelets`` (for Wavelet analysis).
 
 Installing the most recent stable version of the package is as easy as::
 
@@ -20,7 +20,7 @@ Installing the most recent stable version of the package is as easy as::
 Changelog
 =========
 
-1.0 (2020-00-00)
+1.0 (2021-00-00)
 ----------------
 
 Initial beta release
@@ -29,18 +29,20 @@ Initial beta release
     :maxdepth: 2
     :caption: User Guide
 
+    guide/core
     guide/spectral
     guide/phase
     guide/gp
-    api
+    guide/timefrequency
+    guide/decomposition
 
 .. toctree::
     :maxdepth: 1
     :caption: Tutorials
 
-    tutorials/wavelet
     tutorials/fastgp
-
+    tutorials/wavelet
+    tutorials/hht
 
 
 Indices and tables
