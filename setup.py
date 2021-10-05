@@ -5,28 +5,41 @@ import re
 
 import setuptools
 
-with open("README.md", "r") as f:
-    long_description = f.read()
-
 version = re.search(
     '^__version__\\s*=\\s*"(.*)"', open("src/periodicity/__init__.py").read(), re.M
 ).group(1)
 
+with open("README.md", "r") as f:
+    long_description = f.read()
+
 install_requires = [
-    "astropy >= 3.2",
     "autograd",
-    "celerite",
+    "bottleneck",
+    "celerite2",
     "emcee >= 3.0",
     "george",
-    "matplotlib",
     "PyWavelets >= 0.5",
+    "pymc3_ext",
     "scipy >= 1.1",
     "tqdm",
+    "xarray",
 ]
 
 extras_require = {
-    "test": ["black==20.8b1", "flake8", "isort", "pytest", "pytest-cov", "tox"],
-    "docs": ["jupyter", "numpydoc", "myst-nb<0.11", "sphinx_rtd_theme"],
+    "docs": [
+        "jupyter",
+        "myst-nb<0.11",
+        "numpydoc",
+        "sphinx_rtd_theme",
+    ],
+    "test": [
+        "black==20.8b1",
+        "flake8",
+        "isort",
+        "pytest",
+        "pytest-cov",
+        "tox",
+    ],
 }
 
 setuptools.setup(

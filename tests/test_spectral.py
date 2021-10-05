@@ -1,6 +1,6 @@
 import numpy as np
 
-from periodicity.core import Timeseries
+from periodicity.core import TSeries
 from periodicity.spectral import GLS
 
 
@@ -9,9 +9,8 @@ def test_gls_default_frequency_grid():
     ts = 0.1
     fs = 1 / ts
     f0 = 1 / t0
-    rng = np.random.default_rng()
     time = np.arange(0, t0 + ts, ts)
-    signal = Timeseries(time, rng.normal(1, 0.1, time.size))
+    signal = TSeries(time)
     gls = GLS(n=1)
     ls = gls(signal)
     freq = ls.frequency
@@ -26,8 +25,7 @@ def test_gls_default_frequency_grid():
 
 
 def test_can_find_periods():
-    sine = Timeseries(val=np.sin((np.arange(100) / 100) * 20 * np.pi))
+    sine = TSeries(values=np.sin((np.arange(100) / 100) * 20 * np.pi))
     gls = GLS()
     ls = gls(sine)
-    best_period = 1 / ls.frequency[ls.val.argmax()]
-    assert best_period == 10.0
+    assert ls.period_at_highest_peak == 10.0
