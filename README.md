@@ -13,9 +13,10 @@ Currently includes:
 * Spectral methods:
     * Lomb-Scargle periodogram
     * Bayesian Lomb-Scargle with linear Trend (soon™)
-* Time-frequency methods (WIP):
+* Time-frequency methods:
     * Wavelet Transform
     * Hilbert-Huang Transform
+    * Composite Spectrum
 * Phase-folding methods:
     * String Length
     * Phase Dispersion Minimization
@@ -26,8 +27,8 @@ Currently includes:
     * Variational Mode Decomposition (soon™)
 * Gaussian Processes:
     * `george` implementation
-    * `celerite` implementation
-    * `pymc3` implementation (soon™)
+    * `celerite2` implementation
+    * `celerite2.theano` implementation
 
 ## Installation
 
