@@ -13,7 +13,6 @@ with open("README.md", "r") as f:
     long_description = f.read()
 
 install_requires = [
-    "autograd",
     "bottleneck",
     "celerite2",
     "emcee >= 3.0",

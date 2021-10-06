@@ -4,7 +4,6 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-autograd = "*"
 bottleneck = "*"
 celerite2 = "*"
 emcee = ">= 3.0"

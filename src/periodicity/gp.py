@@ -1,8 +1,8 @@
-from autograd import numpy as np
 import celerite2
 import celerite2.theano
 import emcee
 import george
+import numpy as np
 import pymc3 as pm
 import pymc3_ext as pmx
 from scipy.optimize import minimize
@@ -192,11 +192,6 @@ class GeorgeModeler(object):
         gp = self.set_params(theta, gp)
         ll = gp.log_likelihood(self.y, quiet=True)
         return -ll if np.isfinite(ll) else 1e25
-
-    def grad_nll(self, u, gp):
-        theta = self.prior_transform(u)
-        gp = self.set_params(theta, gp)
-        return -gp.grad_log_likelihood(self.y, quiet=True)
 
     def minimize(self, gp):
         """Gradient-based optimization of the objective function within the unit
