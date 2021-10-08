@@ -302,7 +302,7 @@ class CeleriteModeler(object):
         self.gp = celerite2.GaussianProcess(self.kernel(**init_params), mean=mean)
         self.gp.compute(self.t, diag=self.err ** 2 + jitter)
 
-    def prior_transform(self, u):
+    def prior_transform(self, p):
         raise NotImplementedError("subclasses must implement this method")
 
     def set_params(self, params, gp):
@@ -320,26 +320,26 @@ class CeleriteModeler(object):
         sd = np.sqrt(var)
         return mu, sd
 
-    def nll(self, u, gp):
+    def nll(self, p, gp):
         """Objective function based on the Negative Log-Likelihood."""
-        params = self.prior_transform(u)
+        params = self.prior_transform(p)
         gp = self.set_params(params, gp)
         return -gp.log_likelihood(self.y)
 
     def minimize(self, gp, **kwargs):
         """Gradient-based optimization of the objective function within the unit
         hypercube."""
-        u0 = np.full(self.ndim, 0.5)
-        bounds = [(1e-5, 1 - 1e-5) for x in u0]
-        soln = minimize(self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds, **kwargs)
+        p0 = np.full(self.ndim, 50.0)
+        bounds = [(1e-3, 99.999) for x in p0]
+        soln = minimize(self.nll, p0, method="L-BFGS-B", args=(gp,), bounds=bounds, **kwargs)
         opt_params = self.prior_transform(soln.x)
         opt_gp = self.set_params(opt_params, gp)
         return soln, opt_gp
 
-    def log_prob(self, u, gp):
-        if any(u >= 1 - 1e-5) or any(u <= 1e-5):
+    def log_prob(self, p, gp):
+        if any(p >= 99.999) or any(p <= 1e-3):
             return -np.inf
-        params = self.prior_transform(u)
+        params = self.prior_transform(p)
         gp = self.set_params(params, gp)
         ll = gp.log_likelihood(self.y)
         return ll
@@ -374,14 +374,14 @@ class CeleriteModeler(object):
         rng = np.random.default_rng(random_seed)
         np.random.seed(random_seed)
         if use_prior:
-            u0 = rng.random((n_walkers, self.ndim))
+            p0 = rng.random((n_walkers, self.ndim))
         else:
             soln, opt_gp = self.minimize(self.gp)
-            u0 = soln.x + 1e-5 * rng.standard_normal((n_walkers, self.ndim))
+            p0 = soln.x + 1e-3 * rng.standard_normal((n_walkers, self.ndim))
         sampler = emcee.EnsembleSampler(
             n_walkers, self.ndim, self.log_prob, args=(self.gp,)
         )
-        sampler.run_mcmc(u0, n_steps, progress=True)
+        sampler.run_mcmc(p0, n_steps, progress=True)
         samples = sampler.get_chain(discard=burn, flat=True)
         tau = sampler.get_autocorr_time(discard=burn, quiet=True)
         trace = self.prior_transform(samples.T)
@@ -408,7 +408,8 @@ class BrownianGP(CeleriteModeler):
         self.kernel = BrownianTerm
         super().__init__(signal, err, init_period, period_prior)
 
-    def prior_transform(self, u):
+    def prior_transform(self, p):
+        u = p / 100
         period = self.period_prior(u[3])
         params = {
             "mean": norm.ppf(u[0], self.mean, self.sigma),
@@ -427,7 +428,8 @@ class HarmonicGP(CeleriteModeler):
         self.kernel = celerite2.terms.RotationTerm
         super().__init__(signal, err, init_period, period_prior)
 
-    def prior_transform(self, u):
+    def prior_transform(self, p):
+        u = p / 100
         period = self.period_prior(u[2])
         params = {
             "mean": norm.ppf(u[0], self.mean, self.sigma),
