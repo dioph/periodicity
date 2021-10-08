@@ -326,12 +326,12 @@ class CeleriteModeler(object):
         gp = self.set_params(params, gp)
         return -gp.log_likelihood(self.y)
 
-    def minimize(self, gp):
+    def minimize(self, gp, **kwargs):
         """Gradient-based optimization of the objective function within the unit
         hypercube."""
         u0 = np.full(self.ndim, 0.5)
         bounds = [(1e-5, 1 - 1e-5) for x in u0]
-        soln = minimize(self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds)
+        soln = minimize(self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds, **kwargs)
         opt_params = self.prior_transform(soln.x)
         opt_gp = self.set_params(opt_params, gp)
         return soln, opt_gp
