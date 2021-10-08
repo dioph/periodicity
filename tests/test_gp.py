@@ -28,7 +28,7 @@ def test_browniangp_spotted_lc_minimize():
     soln, _ = model.minimize(model.gp, options={'disp': True})
     opt_params = model.prior_transform(soln.x)
     assert np.round(opt_params["period"], 1) == 10.0
-    assert np.allclose(soln.x, np.array([0.49999587, 0.50236365, 0.5598169, 0.599418, 0.99999, 0.24995572]))
+    assert np.allclose(soln.x, np.array([0.49532516, 0.50588049, 0.5597264, 0.59941389, 0.99999, 0.0457812]))
 
 
 def test_harmonicgp_spotted_lc_minimize():
@@ -38,7 +38,7 @@ def test_harmonicgp_spotted_lc_minimize():
     soln, _ = model.minimize(model.gp, options={'disp': True})
     opt_params = model.prior_transform(soln.x)
     assert np.round(opt_params["period"], 1) == 11.0
-    assert np.allclose(soln.x, np.array([0.49999355, 0.47318792, 0.609833, 0.57830117, 0.56661697, 0.48780288, 0.52261041]))
+    assert np.allclose(soln.x, np.array([0.49287794, 0.49067351, 0.60968014, 0.54946591, 0.63684495, 0.1428619, 0.55616662]))
 
 
 # def test_browniangp_spotted_lc_mcmc():

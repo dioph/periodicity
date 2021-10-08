@@ -411,12 +411,12 @@ class BrownianGP(CeleriteModeler):
     def prior_transform(self, u):
         period = self.period_prior(u[3])
         params = {
-            "mean": norm.ppf(u[0], self.mean, 10.0),
-            "sigma": np.exp(norm.ppf(u[1], np.log(self.sigma), 5.0)),
+            "mean": norm.ppf(u[0], self.mean, self.sigma),
+            "sigma": np.exp(norm.ppf(u[1], np.log(self.sigma), 2.0)),
             "tau": period * 10 ** u[2],
             "period": period,
             "mix": u[4] * 0.5,
-            "jitter": np.exp(norm.ppf(u[5], np.log(self.jitter), 5.0)),
+            "jitter": np.exp(norm.ppf(u[5], np.log(self.jitter), 2.0)),
         }
         return params
 
@@ -430,13 +430,13 @@ class HarmonicGP(CeleriteModeler):
     def prior_transform(self, u):
         period = self.period_prior(u[2])
         params = {
-            "mean": norm.ppf(u[0], self.mean, 10.0),
-            "sigma": np.exp(norm.ppf(u[1], np.log(self.sigma), 5.0)),
+            "mean": norm.ppf(u[0], self.mean, self.sigma),
+            "sigma": np.exp(norm.ppf(u[1], np.log(self.sigma), 2.0)),
             "period": period,
             "Q0": np.exp(norm.ppf(u[3], 1.0, 5.0)),
             "dQ": np.exp(norm.ppf(u[4], 2.0, 5.0)),
             "f": u[5],
-            "jitter": np.exp(norm.ppf(u[6], np.log(self.jitter), 5.0)),
+            "jitter": np.exp(norm.ppf(u[6], np.log(self.jitter), 2.0)),
         }
         return params
 
