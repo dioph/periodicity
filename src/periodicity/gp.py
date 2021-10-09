@@ -266,9 +266,9 @@ class QuasiPeriodicGP(GeorgeModeler):
 
     def prior_transform(self, u):
         period = self.period_prior(u[5])
-        mean = norm.ppf(u[0], self.mean, 10.0)
-        jitter = np.exp(norm.ppf(u[1], np.log(self.jitter), 5.0))
-        sigma2 = np.exp(norm.ppf(u[2], 2 * np.log(self.sigma), 5.0))
+        mean = norm.ppf(u[0], self.mean, self.sigma)
+        jitter = np.exp(norm.ppf(u[1], np.log(self.jitter), 2.0))
+        sigma2 = np.exp(norm.ppf(u[2], 2 * np.log(self.sigma), 4.0))
         tau2 = (10 ** u[3] * period) ** 2
         gamma = np.exp(norm.ppf(u[4], 1.5, 1.5))
         theta = [mean, jitter, sigma2, tau2, gamma, period]
@@ -302,7 +302,7 @@ class CeleriteModeler(object):
         self.gp = celerite2.GaussianProcess(self.kernel(**init_params), mean=mean)
         self.gp.compute(self.t, diag=self.err ** 2 + jitter)
 
-    def prior_transform(self, p):
+    def prior_transform(self, u):
         raise NotImplementedError("subclasses must implement this method")
 
     def set_params(self, params, gp):
@@ -320,26 +320,26 @@ class CeleriteModeler(object):
         sd = np.sqrt(var)
         return mu, sd
 
-    def nll(self, p, gp):
+    def nll(self, u, gp):
         """Objective function based on the Negative Log-Likelihood."""
-        params = self.prior_transform(p)
+        params = self.prior_transform(u)
         gp = self.set_params(params, gp)
         return -gp.log_likelihood(self.y)
 
     def minimize(self, gp, **kwargs):
         """Gradient-based optimization of the objective function within the unit
         hypercube."""
-        p0 = np.full(self.ndim, 50.0)
-        bounds = [(1e-3, 99.999) for x in p0]
-        soln = minimize(self.nll, p0, method="L-BFGS-B", args=(gp,), bounds=bounds, **kwargs)
+        u0 = np.full(self.ndim, 0.5)
+        bounds = [(1e-5, 0.99999) for x in u0]
+        soln = minimize(self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds, **kwargs)
         opt_params = self.prior_transform(soln.x)
         opt_gp = self.set_params(opt_params, gp)
         return soln, opt_gp
 
-    def log_prob(self, p, gp):
-        if any(p >= 99.999) or any(p <= 1e-3):
+    def log_prob(self, u, gp):
+        if any(u >= 0.99999) or any(u <= 1e-5):
             return -np.inf
-        params = self.prior_transform(p)
+        params = self.prior_transform(u)
         gp = self.set_params(params, gp)
         ll = gp.log_likelihood(self.y)
         return ll
@@ -374,14 +374,14 @@ class CeleriteModeler(object):
         rng = np.random.default_rng(random_seed)
         np.random.seed(random_seed)
         if use_prior:
-            p0 = rng.random((n_walkers, self.ndim))
+            u0 = rng.random((n_walkers, self.ndim))
         else:
             soln, opt_gp = self.minimize(self.gp)
-            p0 = soln.x + 1e-3 * rng.standard_normal((n_walkers, self.ndim))
+            u0 = soln.x + 1e-5 * rng.standard_normal((n_walkers, self.ndim))
         sampler = emcee.EnsembleSampler(
             n_walkers, self.ndim, self.log_prob, args=(self.gp,)
         )
-        sampler.run_mcmc(p0, n_steps, progress=True)
+        sampler.run_mcmc(u0, n_steps, progress=True)
         samples = sampler.get_chain(discard=burn, flat=True)
         tau = sampler.get_autocorr_time(discard=burn, quiet=True)
         trace = self.prior_transform(samples.T)
@@ -408,8 +408,7 @@ class BrownianGP(CeleriteModeler):
         self.kernel = BrownianTerm
         super().__init__(signal, err, init_period, period_prior)
 
-    def prior_transform(self, p):
-        u = p / 100
+    def prior_transform(self, u):
         period = self.period_prior(u[3])
         params = {
             "mean": norm.ppf(u[0], self.mean, self.sigma),
@@ -428,8 +427,7 @@ class HarmonicGP(CeleriteModeler):
         self.kernel = celerite2.terms.RotationTerm
         super().__init__(signal, err, init_period, period_prior)
 
-    def prior_transform(self, p):
-        u = p / 100
+    def prior_transform(self, u):
         period = self.period_prior(u[2])
         params = {
             "mean": norm.ppf(u[0], self.mean, self.sigma),
@@ -477,11 +475,11 @@ class BrownianTheanoGP(TheanoModeler):
         super().__init__(signal, err, init_period)
         with pm.Model() as model:
             # The mean flux of the time series
-            mean = pm.Normal("mean", mu=self.mean, sd=10.0)
+            mean = pm.Normal("mean", mu=self.mean, sd=self.sigma)
             # A jitter term describing excess white noise
-            log_jitter = pm.Normal("log_jitter", mu=np.log(self.jitter), sd=5.0)
+            log_jitter = pm.Normal("log_jitter", mu=np.log(self.jitter), sd=2.0)
             # The parameters of the BrownianTerm kernel
-            sigma = pm.Lognormal("sigma", mu=np.log(self.sigma), sd=5.0)
+            sigma = pm.Lognormal("sigma", mu=np.log(self.sigma), sd=2.0)
             period = pm.Lognormal(
                 "period", mu=np.log(self.init_period), sd=self.sigma_period
             )
@@ -512,11 +510,11 @@ class HarmonicTheanoGP(TheanoModeler):
         super().__init__(signal, err, init_period)
         with pm.Model() as model:
             # The mean flux of the time series
-            mean = pm.Normal("mean", mu=self.mean, sd=10.0)
+            mean = pm.Normal("mean", mu=self.mean, sd=self.sigma)
             # A jitter term describing excess white noise
-            log_jitter = pm.Normal("log_jitter", mu=np.log(self.jitter), sd=5.0)
+            log_jitter = pm.Normal("log_jitter", mu=np.log(self.jitter), sd=2.0)
             # The parameters of the RotationTerm kernel
-            sigma = pm.Lognormal("sigma", mu=np.log(self.sigma), sd=5.0)
+            sigma = pm.Lognormal("sigma", mu=np.log(self.sigma), sd=2.0)
             period = pm.Lognormal(
                 "period", mu=np.log(self.init_period), sd=self.sigma_period
             )
