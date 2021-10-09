@@ -331,7 +331,9 @@ class CeleriteModeler(object):
         hypercube."""
         u0 = np.full(self.ndim, 0.5)
         bounds = [(1e-5, 0.99999) for x in u0]
-        soln = minimize(self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds, **kwargs)
+        soln = minimize(
+            self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds, **kwargs
+        )
         opt_params = self.prior_transform(soln.x)
         opt_gp = self.set_params(opt_params, gp)
         return soln, opt_gp
