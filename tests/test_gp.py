@@ -25,7 +25,9 @@ def test_browniangp_spotted_lc_minimize():
     t, y, dy = SpottedStar()
     sig = TSeries(t, y)
     model = BrownianGP(sig, err=dy)
-    soln, _ = model.minimize(model.gp, options={"disp": True})
+    soln, _ = model.minimize(
+        model.gp, options={"disp": True, "eps": 1e-10, "ftol": 1e-10}
+    )
     assert soln.fun < -12898
     assert np.all(np.logical_and(soln.x <= 0.99999, soln.x >= 1e-5))
 
@@ -34,7 +36,9 @@ def test_harmonicgp_spotted_lc_minimize():
     t, y, dy = SpottedStar()
     sig = TSeries(t, y)
     model = HarmonicGP(sig, err=dy)
-    soln, _ = model.minimize(model.gp, options={"disp": True})
+    soln, _ = model.minimize(
+        model.gp, options={"disp": True, "eps": 1e-10, "ftol": 1e-10}
+    )
     assert soln.fun < -13188
     assert np.all(np.logical_and(soln.x <= 0.99999, soln.x >= 1e-5))
 
