@@ -295,7 +295,7 @@ class CeleriteModeler(object):
                 return np.exp(norm.ppf(u, np.log(init_period), sigma_period))
 
         self.period_prior = period_prior
-        init_params = self.prior_transform(np.full(self.ndim, 0.5))
+        init_params = self.prior_transform(np.full(self.ndim, 50.0))
         init_params["period"] = init_period
         mean = init_params.pop("mean")
         jitter = init_params.pop("jitter")
@@ -329,8 +329,8 @@ class CeleriteModeler(object):
     def minimize(self, gp, **kwargs):
         """Gradient-based optimization of the objective function within the unit
         hypercube."""
-        u0 = np.full(self.ndim, 0.5)
-        bounds = [(1e-5, 0.99999) for x in u0]
+        u0 = np.full(self.ndim, 50.0)
+        bounds = [(0.01, 99.99) for x in u0]
         soln = minimize(
             self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds, **kwargs
         )
@@ -339,7 +339,7 @@ class CeleriteModeler(object):
         return soln, opt_gp
 
     def log_prob(self, u, gp):
-        if any(u >= 0.99999) or any(u <= 1e-5):
+        if any(u >= 99.99) or any(u <= 0.01):
             return -np.inf
         params = self.prior_transform(u)
         gp = self.set_params(params, gp)
@@ -379,7 +379,7 @@ class CeleriteModeler(object):
             u0 = rng.random((n_walkers, self.ndim))
         else:
             soln, opt_gp = self.minimize(self.gp)
-            u0 = soln.x + 1e-5 * rng.standard_normal((n_walkers, self.ndim))
+            u0 = soln.x + 1e-3 * rng.standard_normal((n_walkers, self.ndim))
         sampler = emcee.EnsembleSampler(
             n_walkers, self.ndim, self.log_prob, args=(self.gp,)
         )
@@ -411,6 +411,7 @@ class BrownianGP(CeleriteModeler):
         super().__init__(signal, err, init_period, period_prior)
 
     def prior_transform(self, u):
+        u = u / 100
         period = self.period_prior(u[3])
         params = {
             "mean": norm.ppf(u[0], self.mean, self.sigma),
@@ -430,6 +431,7 @@ class HarmonicGP(CeleriteModeler):
         super().__init__(signal, err, init_period, period_prior)
 
     def prior_transform(self, u):
+        u = u / 100
         period = self.period_prior(u[2])
         params = {
             "mean": norm.ppf(u[0], self.mean, self.sigma),
