@@ -941,6 +941,14 @@ class FSeries(Signal):
     def pmax(self):
         return self.max().period.item()
 
+    def psort_by_peak(self):
+        peaks = self.find_peaks()
+        return peaks.period[peaks.values.argsort()[::-1]]
+
+    def psort_by_prominence(self):
+        peaks = self.find_peaks()
+        return peaks.period[peaks.attrs["prominences"].argsort()[::-1]]
+
     @property
     def period_at_highest_peak(self):
         peaks = self.find_peaks()
@@ -951,6 +959,23 @@ class FSeries(Signal):
         peaks = self.find_peaks()
         prominences = peaks.attrs["prominences"]
         return peaks.period[np.nanargmax(prominences)]
+
+    def periods_at_half_max(self, peak_order=1, use_prominence=False):
+        peaks = self.find_peaks()
+        indices = peaks.attrs["indices"]
+        if use_prominence:
+            heights = peaks.attrs["prominences"]
+        else:
+            heights = peaks.values
+        jmax = heights.argsort()[-peak_order]
+        idmax = indices[jmax]
+        height = heights[jmax]
+        half = self[idmax] - height / 2
+        hi = (self[:idmax] - half).find_zero_crossings()[-1]
+        lo = (self[idmax:] - half).find_zero_crossings()[0]
+        upper = self[:idmax].period[hi]
+        lower = self[idmax:].period[lo]
+        return lower, upper
 
     def ifft(self, nfft=None):
         coefs = np.fft.irfft(self.values, n=nfft)
