@@ -46,6 +46,20 @@ def _gaussian(mu, sd):
 
 
 def make_ppf(x, pdf):
+    """Generate an empirical Percent Point Function (inverse CDF) for an arbitrary PDF.
+
+    Parameters
+    ---------
+    x: array-like
+        Points at which to evaluate the PDF.
+    pdf: array-like
+        PDF sampled at x.
+
+    Returns
+    -------
+    ppf: function
+        Interpolates the inverse CDF.
+    """
     cdf = np.cumsum(pdf)
     cdf /= cdf[-1]
 
@@ -143,7 +157,15 @@ def make_gaussian_prior(
 
 
 class GeorgeModeler(object):
-    def __init__(self, signal, err, init_period=None, period_prior=None):
+    def __init__(
+        self,
+        signal,
+        err,
+        init_period=None,
+        period_prior=None,
+        bounds=None,
+        constraints=None,
+    ):
         if not isinstance(signal, TSeries):
             signal = TSeries(data=signal)
         self.signal = signal
@@ -156,12 +178,14 @@ class GeorgeModeler(object):
         if init_period is None:
             init_period = np.sqrt(signal.size) * signal.median_dt
         if period_prior is None:
+            sd_p = 0.2 * np.log(signal.size)
 
-            def period_prior(u):
-                sigma_period = 0.2 * np.log(signal.size)
-                return np.exp(norm.ppf(u, np.log(init_period), sigma_period))
+            def period_prior(period):
+                return norm.logpdf(np.log(period), np.log(init_period), sd_p)
 
         self.period_prior = period_prior
+        self.bounds = bounds
+        self.constraints = constraints
         self.gp = george.GP(
             self.kernel,
             solver=george.HODLRSolver,
@@ -170,10 +194,18 @@ class GeorgeModeler(object):
             white_noise=np.log(self.jitter),
             fit_white_noise=True,
         )
+        self.basic_gp = george.GP(
+            self.kernel,
+            mean=self.mean,
+            fit_mean=True,
+            white_noise=np.log(self.jitter),
+            fit_white_noise=True,
+        )
         self.gp.compute(self.t, yerr=self.err)
+        self.basic_gp.compute(self.t, yerr=self.err)
         self.ndim = len(self.gp)
 
-    def prior_transform(self, u):
+    def log_prior(self, theta):
         raise NotImplementedError("subclasses must implement this method")
 
     def set_params(self, theta, gp):
@@ -186,35 +218,46 @@ class GeorgeModeler(object):
         sd = np.sqrt(var)
         return mu, sd
 
-    def nll(self, u, gp):
+    def get_kernel(self, tau, gp):
+        return gp.kernel.get_value([[0]], gp.parse_samples(tau))[0]
+
+    def nll(self, theta, gp):
         """Objective function based on the Negative Log-Likelihood."""
-        theta = self.prior_transform(u)
         gp = self.set_params(theta, gp)
         ll = gp.log_likelihood(self.y, quiet=True)
         return -ll if np.isfinite(ll) else 1e25
 
-    def minimize(self, gp):
+    def grad_nll(self, theta, gp):
+        gp = self.set_params(theta, gp)
+        grad = -gp.grad_log_likelihood(self.y, quiet=True)
+        return grad
+
+    def minimize(self, gp, grad=False, **kwargs):
         """Gradient-based optimization of the objective function within the unit
         hypercube."""
-        u0 = np.full(self.ndim, 0.5)
-        bounds = [(1e-5, 1 - 1e-5) for x in u0]
-        soln = minimize(self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds)
-        opt_theta = self.prior_transform(soln.x)
-        opt_gp = self.set_params(opt_theta, gp)
+        x0 = gp.get_parameter_vector()
+        soln = minimize(
+            self.nll,
+            x0,
+            jac=self.grad_nll if grad else None,
+            args=(gp,),
+            bounds=self.bounds,
+            constraints=self.constraints,
+            **kwargs,
+        )
+        opt_gp = self.set_params(soln.x, gp)
         return soln, opt_gp
 
-    def log_prob(self, u, gp):
+    def log_prob(self, theta, gp):
         """Posterior distribution over the hyperparameters."""
-        if any(u >= 1 - 1e-5) or any(u <= 1e-5):
+        lp = self.log_prior(theta)
+        if not np.isfinite(lp):
             return -np.inf
-        params = self.prior_transform(u)
-        gp = self.set_params(params, gp)
-        ll = gp.log_likelihood(self.y)
-        return ll
+        gp = self.set_params(theta, gp)
+        lp += gp.log_likelihood(self.y)
+        return lp
 
-    def mcmc(
-        self, n_walkers=50, n_steps=1000, burn=0, use_prior=False, random_seed=None
-    ):
+    def mcmc(self, n_walkers=50, n_steps=1000, burn=0, random_seed=None):
         """Samples the posterior probability distribution with a Markov Chain
         Monte Carlo simulation.
 
@@ -239,44 +282,66 @@ class GeorgeModeler(object):
         """
         rng = np.random.default_rng(random_seed)
         np.random.seed(random_seed)
-        if use_prior:
-            u0 = rng.random((n_walkers, self.ndim))
-        else:
-            soln, opt_gp = self.minimize(self.gp)
-            u0 = soln.x + 1e-5 * rng.standard_normal((n_walkers, self.ndim))
+        soln, opt_gp = self.minimize(self.gp)
+        x0 = soln.x + 1e-3 * rng.standard_normal((n_walkers, self.ndim))
         # TODO: multi-threading
         sampler = emcee.EnsembleSampler(
             n_walkers, self.ndim, self.log_prob, args=(self.gp,)
         )
-        sampler.run_mcmc(u0, n_steps, progress=True)
+        sampler.run_mcmc(x0, n_steps, progress=True)
         samples = sampler.get_chain(discard=burn, flat=True)
         tau = sampler.get_autocorr_time(discard=burn, quiet=True)
-        trace = np.vstack(self.prior_transform(samples.T))
+        trace = samples.T
         self.sampler = sampler
         return trace, tau
 
 
 class QuasiPeriodicGP(GeorgeModeler):
-    def __init__(self, signal, err, init_period=None, period_prior=None):
-        kernel = george.kernels.ConstantKernel(np.var(signal))
+    def __init__(
+        self,
+        signal,
+        err,
+        init_period=None,
+        period_prior=None,
+        bounds=None,
+        constraints=None,
+    ):
+        kernel = george.kernels.ConstantKernel(np.log(np.var(signal)))
         kernel *= george.kernels.ExpSquaredKernel(10.0)
         kernel *= george.kernels.ExpSine2Kernel(4.5, 0.0)
         self.kernel = kernel
-        super().__init__(signal, err, init_period, period_prior)
+        super().__init__(signal, err, init_period, period_prior, bounds, constraints)
+        if self.bounds is None:
+            pmin = 2 * self.signal.median_dt
+            pmax = 0.5 * self.signal.baseline
+            self.bounds = [
+                (self.mean - self.sigma, self.mean + self.sigma),
+                (np.log(self.jitter) - 5, np.log(self.jitter) + 5),
+                (2 * np.log(self.sigma) - 10, 2 * np.log(self.sigma) + 10),
+                (2 * np.log(pmin), 2 * np.log(10 * pmax)),
+                (1.0, 20.0),
+                (np.log(pmin), np.log(pmax)),
+            ]
+        if self.constraints is None:
+            # guarantee tau > period
+            self.constraints = {"type": "ineq", "fun": lambda x: 0.5 * x[3] - x[5]}
 
-    def prior_transform(self, u):
-        period = self.period_prior(u[5])
-        mean = norm.ppf(u[0], self.mean, self.sigma)
-        jitter = np.exp(norm.ppf(u[1], np.log(self.jitter), 2.0))
-        sigma2 = np.exp(norm.ppf(u[2], 2 * np.log(self.sigma), 4.0))
-        tau2 = (10 ** u[3] * period) ** 2
-        gamma = np.exp(norm.ppf(u[4], 1.5, 1.5))
-        theta = [mean, jitter, sigma2, tau2, gamma, period]
-        return theta
+    def log_prior(self, theta):
+        mean, log_jitter, log_sigma2, log_tau2, gamma, log_period = theta
+        tau = np.exp(log_tau2 / 2)
+        period = np.exp(log_period)
+        lp = norm.logpdf(mean, self.mean, self.sigma)
+        lp += norm.logpdf(log_jitter, np.log(self.jitter), 2.0)
+        lp += norm.logpdf(log_sigma2, 2 * np.log(self.sigma), 4.0)
+        lp += 1 / np.log(100)
+        lp += np.log(np.logical_and(1 < tau / period, tau / period < 10))
+        lp += norm.logpdf(np.log(gamma), 1.5, 1.5)
+        lp += self.period_prior(np.exp(log_period))
+        return lp
 
 
 class CeleriteModeler(object):
-    def __init__(self, signal, err, init_period=None, period_prior=None):
+    def __init__(self, signal, err, init_period=None, period_ppf=None):
         if not isinstance(signal, TSeries):
             signal = TSeries(data=signal)
         self.signal = signal
@@ -288,13 +353,13 @@ class CeleriteModeler(object):
         self.mean = np.mean(self.y)
         if init_period is None:
             init_period = np.sqrt(signal.size) * signal.median_dt
-        if period_prior is None:
+        if period_ppf is None:
 
-            def period_prior(u):
+            def period_ppf(u):
                 sigma_period = 0.5 * np.log(signal.size)
                 return np.exp(norm.ppf(u, np.log(init_period), sigma_period))
 
-        self.period_prior = period_prior
+        self.period_ppf = period_ppf
         init_params = self.prior_transform(np.full(self.ndim, 50.0))
         init_params["period"] = init_period
         mean = init_params.pop("mean")
@@ -319,6 +384,9 @@ class CeleriteModeler(object):
         mu, var = gp.predict(self.y, t=time, return_var=True)
         sd = np.sqrt(var)
         return mu, sd
+
+    def get_kernel(self, tau, gp):
+        return gp.kernel.get_value(tau)
 
     def nll(self, u, gp):
         """Objective function based on the Negative Log-Likelihood."""
@@ -405,14 +473,14 @@ class BrownianTerm(celerite2.terms.TermSum):
 
 
 class BrownianGP(CeleriteModeler):
-    def __init__(self, signal, err, init_period=None, period_prior=None):
+    def __init__(self, signal, err, init_period=None, period_ppf=None):
         self.ndim = 6
         self.kernel = BrownianTerm
-        super().__init__(signal, err, init_period, period_prior)
+        super().__init__(signal, err, init_period, period_ppf)
 
     def prior_transform(self, u):
         u = u / 100
-        period = self.period_prior(u[3])
+        period = self.period_ppf(u[3])
         params = {
             "mean": norm.ppf(u[0], self.mean, self.sigma),
             "sigma": np.exp(norm.ppf(u[1], np.log(self.sigma), 2.0)),
@@ -425,14 +493,14 @@ class BrownianGP(CeleriteModeler):
 
 
 class HarmonicGP(CeleriteModeler):
-    def __init__(self, signal, err, init_period=None, period_prior=None):
+    def __init__(self, signal, err, init_period=None, period_ppf=None):
         self.ndim = 7
         self.kernel = celerite2.terms.RotationTerm
-        super().__init__(signal, err, init_period, period_prior)
+        super().__init__(signal, err, init_period, period_ppf)
 
     def prior_transform(self, u):
         u = u / 100
-        period = self.period_prior(u[2])
+        period = self.period_ppf(u[2])
         params = {
             "mean": norm.ppf(u[0], self.mean, self.sigma),
             "sigma": np.exp(norm.ppf(u[1], np.log(self.sigma), 2.0)),
