@@ -144,8 +144,10 @@ class GLS(object):
         gls = self.copy()
         for i in range(n_bootstraps):
             bs_sample = self.signal.copy()
-            bs_sample.values = self.signal.values[rng.integers(0, ndata, ndata)]
-            bs_replicates[i] = gls(bs_sample).max()
+            bs = rng.integers(0, ndata, ndata)
+            bs_sample.values = self.signal.values[bs]
+            bs_err = self.err[bs]
+            bs_replicates[i] = gls(bs_sample, err=bs_err).amax()
         self.bs_replicates = bs_replicates
         return self.bs_replicates
 
