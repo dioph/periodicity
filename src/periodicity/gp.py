@@ -361,7 +361,6 @@ class CeleriteModeler(object):
 
         self.period_ppf = period_ppf
         init_params = self.prior_transform(np.full(self.ndim, 50.0))
-        init_params["period"] = init_period
         mean = init_params.pop("mean")
         jitter = init_params.pop("jitter")
         self.gp = celerite2.GaussianProcess(self.kernel(**init_params), mean=mean)
@@ -388,16 +387,28 @@ class CeleriteModeler(object):
     def get_kernel(self, tau, gp):
         return gp.kernel.get_value(tau)
 
+    def loocv(self, gp):
+        """(Log-)Leave-One-Out Cross-Validation"""
+        r = self.y - gp._mean_value
+        q = gp._do_solve(r[:, np.newaxis])[:, 0]
+        c = gp._do_solve(np.eye(self.signal.size)).diagonal()
+        return -0.5 * (
+            np.sum(q ** 2 / c)
+            - np.sum(np.log(c))
+            + self.signal.size * np.log(2 * np.pi)
+        )
+
     def nll(self, u, gp):
         """Objective function based on the Negative Log-Likelihood."""
         params = self.prior_transform(u)
         gp = self.set_params(params, gp)
         return -gp.log_likelihood(self.y)
 
-    def minimize(self, gp, **kwargs):
+    def minimize(self, gp, u0=None, **kwargs):
         """Gradient-based optimization of the objective function within the unit
         hypercube."""
-        u0 = np.full(self.ndim, 50.0)
+        if u0 is None:
+            u0 = np.full(self.ndim, 50.0)
         bounds = [(0.01, 99.99) for x in u0]
         soln = minimize(
             self.nll, u0, method="L-BFGS-B", args=(gp,), bounds=bounds, **kwargs
@@ -406,16 +417,25 @@ class CeleriteModeler(object):
         opt_gp = self.set_params(opt_params, gp)
         return soln, opt_gp
 
-    def log_prob(self, u, gp):
+    def log_prob(self, u, gp, psd_at=None):
         if any(u >= 99.99) or any(u <= 0.01):
-            return -np.inf
-        params = self.prior_transform(u)
-        gp = self.set_params(params, gp)
-        ll = gp.log_likelihood(self.y)
-        return ll
+            ll = -np.inf
+        else:
+            params = self.prior_transform(u)
+            gp = self.set_params(params, gp)
+            ll = gp.log_likelihood(self.y)
+        if psd_at is None:
+            return ll
+        return ll, self.get_psd(psd_at, gp)
 
     def mcmc(
-        self, n_walkers=50, n_steps=1000, burn=0, use_prior=False, random_seed=None
+        self,
+        n_walkers=50,
+        n_steps=1000,
+        burn=0,
+        use_prior=False,
+        psd_at=None,
+        random_seed=None,
     ):
         """Samples the posterior probability distribution with a Markov Chain
         Monte Carlo simulation.
@@ -433,6 +453,9 @@ class CeleriteModeler(object):
             Whether to start walkers by sampling from the prior distribution.
             The default is False, in which case a ball centered
             at the MLE hyperparameter vector is used.
+        psd_at: array-like, optional
+            List of frequencies (with units of 1 / time) at which to evaluate the PSD
+            for each sample.
 
         Returns
         -------
@@ -449,10 +472,15 @@ class CeleriteModeler(object):
             soln, opt_gp = self.minimize(self.gp)
             u0 = soln.x + 1e-3 * rng.standard_normal((n_walkers, self.ndim))
         sampler = emcee.EnsembleSampler(
-            n_walkers, self.ndim, self.log_prob, args=(self.gp,)
+            n_walkers,
+            self.ndim,
+            self.log_prob,
+            kwargs={"gp": self.gp, "psd_at": psd_at},
         )
         sampler.run_mcmc(u0, n_steps, progress=True)
         samples = sampler.get_chain(discard=burn, flat=True)
+        if psd_at is not None:
+            self.psds = sampler.get_blobs(discard=burn, flat=True)
         tau = sampler.get_autocorr_time(discard=burn, quiet=True)
         trace = self.prior_transform(samples.T)
         self.sampler = sampler
