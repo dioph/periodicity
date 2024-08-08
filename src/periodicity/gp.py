@@ -1,10 +1,10 @@
 import celerite2
-import celerite2.theano
+# import celerite2.pymc4
 import emcee
 import george
 import numpy as np
-import pymc3 as pm
-import pymc3_ext as pmx
+import pymc as pm
+import pymc_ext as pmx
 from scipy.optimize import minimize
 from scipy.stats import norm
 
@@ -13,12 +13,9 @@ from .core import TSeries
 __all__ = [
     "GeorgeModeler",
     "CeleriteModeler",
-    "TheanoModeler",
     "QuasiPeriodicGP",
     "BrownianGP",
     "HarmonicGP",
-    "BrownianTheanoGP",
-    "HarmonicTheanoGP",
 ]
 
 
@@ -541,99 +538,99 @@ class HarmonicGP(CeleriteModeler):
         return params
 
 
-class TheanoModeler(object):
-    def __init__(self, signal, err, init_period=None):
-        if not isinstance(signal, TSeries):
-            signal = TSeries(data=signal)
-        self.signal = signal
-        self.err = err
-        self.t = self.signal.time
-        self.y = self.signal.values
-        self.sigma = np.std(self.y)
-        self.jitter = np.min(self.err) ** 2
-        self.mean = np.mean(self.y)
-        if init_period is None:
-            init_period = np.sqrt(signal.size) * signal.median_dt
-        self.sigma_period = 0.5 * np.log(signal.size)
-        self.init_period = init_period
+# class TheanoModeler(object):
+#     def __init__(self, signal, err, init_period=None):
+#         if not isinstance(signal, TSeries):
+#             signal = TSeries(data=signal)
+#         self.signal = signal
+#         self.err = err
+#         self.t = self.signal.time
+#         self.y = self.signal.values
+#         self.sigma = np.std(self.y)
+#         self.jitter = np.min(self.err) ** 2
+#         self.mean = np.mean(self.y)
+#         if init_period is None:
+#             init_period = np.sqrt(signal.size) * signal.median_dt
+#         self.sigma_period = 0.5 * np.log(signal.size)
+#         self.init_period = init_period
 
-    def mcmc(self, n_walkers=1, n_steps=2000, burn=1000, cores=1):
-        with self.model:
-            trace = pmx.sample(
-                tune=burn,
-                draws=n_steps - burn,
-                cores=cores,
-                chains=n_walkers,
-                random_seed=42,
-            )
-            self.period_samples = trace["period"]
-            return trace
-
-
-class BrownianTheanoGP(TheanoModeler):
-    def __init__(self, signal, err, init_period=None, predict_at=None, psd_at=None):
-        super().__init__(signal, err, init_period)
-        with pm.Model() as model:
-            # The mean flux of the time series
-            mean = pm.Normal("mean", mu=self.mean, sd=self.sigma)
-            # A jitter term describing excess white noise
-            log_jitter = pm.Normal("log_jitter", mu=np.log(self.jitter), sd=2.0)
-            # The parameters of the BrownianTerm kernel
-            sigma = pm.Lognormal("sigma", mu=np.log(self.sigma), sd=2.0)
-            period = pm.Lognormal(
-                "period", mu=np.log(self.init_period), sd=self.sigma_period
-            )
-            log_tau = pm.Uniform("log_tau", lower=0.0, upper=np.log(10))
-            tau = pm.math.exp(log_tau) * period
-            mix = pm.Uniform("mix", lower=0.0, upper=0.5)
-            Q = 0.01
-            sigma_1 = sigma * pm.math.sqrt(mix)
-            f = pm.math.sqrt(1 - 4 * Q ** 2)
-            w0 = 2 * Q / (tau * (1 - f))
-            S0 = (1 - mix) * sigma ** 2 / (0.5 * w0 * Q * (1 + 1 / f))
-            # Set up the Gaussian Process model
-            kernel1 = celerite2.theano.terms.SHOTerm(sigma=sigma_1, tau=tau, rho=period)
-            kernel2 = celerite2.theano.terms.SHOTerm(S0=S0, w0=w0, Q=Q)
-            kernel = kernel1 + kernel2
-            gp = celerite2.theano.GaussianProcess(kernel, mean=mean)
-            gp.compute(self.t, diag=self.err ** 2 + pm.math.exp(log_jitter), quiet=True)
-            gp.marginal("obs", observed=self.y)
-            if predict_at is not None:
-                pm.Deterministic("pred", gp.predict(self.y, predict_at))
-            if psd_at is not None:
-                pm.Deterministic("psd", kernel.get_psd(2 * np.pi * psd_at))
-        self.model = model
+#     def mcmc(self, n_walkers=1, n_steps=2000, burn=1000, cores=1):
+#         with self.model:
+#             trace = pmx.sample(
+#                 tune=burn,
+#                 draws=n_steps - burn,
+#                 cores=cores,
+#                 chains=n_walkers,
+#                 random_seed=42,
+#             )
+#             self.period_samples = trace["period"]
+#             return trace
 
 
-class HarmonicTheanoGP(TheanoModeler):
-    def __init__(self, signal, err, init_period=None, predict_at=None, psd_at=None):
-        super().__init__(signal, err, init_period)
-        with pm.Model() as model:
-            # The mean flux of the time series
-            mean = pm.Normal("mean", mu=self.mean, sd=self.sigma)
-            # A jitter term describing excess white noise
-            log_jitter = pm.Normal("log_jitter", mu=np.log(self.jitter), sd=2.0)
-            # The parameters of the RotationTerm kernel
-            sigma = pm.Lognormal("sigma", mu=np.log(self.sigma), sd=2.0)
-            period = pm.Lognormal(
-                "period", mu=np.log(self.init_period), sd=self.sigma_period
-            )
-            Q0 = pm.Lognormal("Q0", mu=1.0, sd=5.0)
-            dQ = pm.Lognormal("dQ", mu=2.0, sd=5.0)
-            f = pm.Uniform("f", lower=0.0, upper=1.0)
-            # Set up the Gaussian Process model
-            kernel = celerite2.theano.terms.RotationTerm(
-                sigma=sigma,
-                period=period,
-                Q0=Q0,
-                dQ=dQ,
-                f=f,
-            )
-            gp = celerite2.theano.GaussianProcess(kernel, mean=mean)
-            gp.compute(self.t, diag=self.err ** 2 + pm.math.exp(log_jitter), quiet=True)
-            gp.marginal("obs", observed=self.y)
-            if predict_at is not None:
-                pm.Deterministic("pred", gp.predict(self.y, predict_at))
-            if psd_at is not None:
-                pm.Deterministic("psd", kernel.get_psd(2 * np.pi * psd_at))
-        self.model = model
+# class BrownianTheanoGP(TheanoModeler):
+#     def __init__(self, signal, err, init_period=None, predict_at=None, psd_at=None):
+#         super().__init__(signal, err, init_period)
+#         with pm.Model() as model:
+#             # The mean flux of the time series
+#             mean = pm.Normal("mean", mu=self.mean, sd=self.sigma)
+#             # A jitter term describing excess white noise
+#             log_jitter = pm.Normal("log_jitter", mu=np.log(self.jitter), sd=2.0)
+#             # The parameters of the BrownianTerm kernel
+#             sigma = pm.Lognormal("sigma", mu=np.log(self.sigma), sd=2.0)
+#             period = pm.Lognormal(
+#                 "period", mu=np.log(self.init_period), sd=self.sigma_period
+#             )
+#             log_tau = pm.Uniform("log_tau", lower=0.0, upper=np.log(10))
+#             tau = pm.math.exp(log_tau) * period
+#             mix = pm.Uniform("mix", lower=0.0, upper=0.5)
+#             Q = 0.01
+#             sigma_1 = sigma * pm.math.sqrt(mix)
+#             f = pm.math.sqrt(1 - 4 * Q ** 2)
+#             w0 = 2 * Q / (tau * (1 - f))
+#             S0 = (1 - mix) * sigma ** 2 / (0.5 * w0 * Q * (1 + 1 / f))
+#             # Set up the Gaussian Process model
+#             kernel1 = celerite2.theano.terms.SHOTerm(sigma=sigma_1, tau=tau, rho=period)
+#             kernel2 = celerite2.theano.terms.SHOTerm(S0=S0, w0=w0, Q=Q)
+#             kernel = kernel1 + kernel2
+#             gp = celerite2.theano.GaussianProcess(kernel, mean=mean)
+#             gp.compute(self.t, diag=self.err ** 2 + pm.math.exp(log_jitter), quiet=True)
+#             gp.marginal("obs", observed=self.y)
+#             if predict_at is not None:
+#                 pm.Deterministic("pred", gp.predict(self.y, predict_at))
+#             if psd_at is not None:
+#                 pm.Deterministic("psd", kernel.get_psd(2 * np.pi * psd_at))
+#         self.model = model
+
+
+# class HarmonicTheanoGP(TheanoModeler):
+#     def __init__(self, signal, err, init_period=None, predict_at=None, psd_at=None):
+#         super().__init__(signal, err, init_period)
+#         with pm.Model() as model:
+#             # The mean flux of the time series
+#             mean = pm.Normal("mean", mu=self.mean, sd=self.sigma)
+#             # A jitter term describing excess white noise
+#             log_jitter = pm.Normal("log_jitter", mu=np.log(self.jitter), sd=2.0)
+#             # The parameters of the RotationTerm kernel
+#             sigma = pm.Lognormal("sigma", mu=np.log(self.sigma), sd=2.0)
+#             period = pm.Lognormal(
+#                 "period", mu=np.log(self.init_period), sd=self.sigma_period
+#             )
+#             Q0 = pm.Lognormal("Q0", mu=1.0, sd=5.0)
+#             dQ = pm.Lognormal("dQ", mu=2.0, sd=5.0)
+#             f = pm.Uniform("f", lower=0.0, upper=1.0)
+#             # Set up the Gaussian Process model
+#             kernel = celerite2.theano.terms.RotationTerm(
+#                 sigma=sigma,
+#                 period=period,
+#                 Q0=Q0,
+#                 dQ=dQ,
+#                 f=f,
+#             )
+#             gp = celerite2.theano.GaussianProcess(kernel, mean=mean)
+#             gp.compute(self.t, diag=self.err ** 2 + pm.math.exp(log_jitter), quiet=True)
+#             gp.marginal("obs", observed=self.y)
+#             if predict_at is not None:
+#                 pm.Deterministic("pred", gp.predict(self.y, predict_at))
+#             if psd_at is not None:
+#                 pm.Deterministic("psd", kernel.get_psd(2 * np.pi * psd_at))
+#         self.model = model

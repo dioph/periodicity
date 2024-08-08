@@ -18,7 +18,7 @@ install_requires = [
     "emcee >= 3.0",
     "george",
     "PyWavelets >= 0.5",
-    "pymc3_ext",
+    "pymc_ext",
     "scipy >= 1.1",
     "tqdm",
     "xarray",
