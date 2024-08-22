@@ -163,7 +163,7 @@ class PDM(object):
         self.t = signal.time
         self.x = signal.values
         self.sigma = np.var(signal.values, ddof=1)
-        theta_crit = 1.0 - 11.0 / signal.size ** 0.8
+        theta_crit = 1.0 - 11.0 / signal.size**0.8
         t0 = signal.baseline
         if self.p_min is None:
             p_min = 2 * signal.median_dt

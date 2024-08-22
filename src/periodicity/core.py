@@ -148,7 +148,7 @@ class Signal(np.lib.mixins.NDArrayOperatorsMixin):
         return type(self)(result)
 
     def __array_function__(self, func, types, args, kwargs):
-        """"https://numpy.org/doc/stable/reference/arrays.classes.html#numpy.class.__array_function__"""
+        """https://numpy.org/doc/stable/reference/arrays.classes.html#numpy.class.__array_function__"""
         if func not in HANDLED_FUNCTIONS:
             return NotImplemented
         if not all(issubclass(t, Signal) for t in types):
@@ -418,14 +418,14 @@ class Signal(np.lib.mixins.NDArrayOperatorsMixin):
             xf = ndimage.gaussian_filter(self.values, sigma=width, **kwargs)
         elif kernel == "boxcar":
             if width % 2 == 0:
-                weight = np.ones((width + 1,) * self.ndim) / width ** self.ndim
+                weight = np.ones((width + 1,) * self.ndim) / width**self.ndim
                 edges = [slice(None)] * self.ndim
                 for i in range(self.ndim):
                     edges[i] = [0, -1]
                     weight[tuple(edges)] /= 2
                     edges[i] = slice(None)
             else:
-                weight = np.ones((width,) * self.ndim) / width ** self.ndim
+                weight = np.ones((width,) * self.ndim) / width**self.ndim
             xf = self.convolve(weight).values
         elif kernel == "triangle":
             half = int(width // 2)

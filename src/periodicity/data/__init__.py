@@ -167,7 +167,7 @@ def DuffingWave():
     """
     t = np.arange(1024)
     data = np.exp(-t / 256) * np.cos(
-        (np.pi / 64) * (t ** 2 / 512 + 32)
-        + 0.3 * np.sin((np.pi / 32) * (t ** 2 / 512 + 32))
+        (np.pi / 64) * (t**2 / 512 + 32)
+        + 0.3 * np.sin((np.pi / 32) * (t**2 / 512 + 32))
     )
     return data

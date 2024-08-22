@@ -2,7 +2,7 @@ import numpy as np
 
 from periodicity.core import TSeries
 from periodicity.data import SpottedStar
-from periodicity.gp import BrownianGP, HarmonicGP, QuasiPeriodicGP, make_gaussian_prior
+from periodicity.gp import BrownianGP, HarmonicGP, make_gaussian_prior
 
 
 def test_make_gaussian_prior_spotted_lc():

@@ -109,7 +109,7 @@ class HHT(object):
                 if self.method == "DQ":
                     A, F = self._normalize(mode)
                     amp = A.values
-                    phi = np.arctan2(np.sqrt(1 - F.values ** 2), F.values)
+                    phi = np.arctan2(np.sqrt(1 - F.values**2), F.values)
                     corr = np.sign(np.gradient(phi))
                     phi = np.unwrap(phi * corr)
                     freq = np.gradient(phi, F.time)
@@ -163,7 +163,7 @@ def reconstruct(coefs, periods, dt, family):
     scales = pywt.scale2frequency(family, 1) * periods / dt
     mwf = pywt.ContinuousWavelet("morl").wavefun()
     y_0 = mwf[0][np.argmin(np.abs(mwf[1]))]
-    r_sum = np.transpose(np.sum(np.transpose(coefs) / scales ** 0.5, axis=-1))
+    r_sum = np.transpose(np.sum(np.transpose(coefs) / scales**0.5, axis=-1))
     return r_sum * (1 / y_0)
 
 

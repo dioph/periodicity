@@ -99,7 +99,7 @@ class GLS(object):
         if err is None:
             err = np.ones_like(signal.values)
         self.err = err
-        w = err ** -2.0
+        w = err**-2.0
         w /= w.sum()
         t = signal.time
         if fit_mean:
@@ -117,7 +117,7 @@ class GLS(object):
         C2w = 1 / np.sqrt(1 + tan_2omega_tau * tan_2omega_tau)
         Cw = np.sqrt(0.5) * np.sqrt(1 + C2w)
         Sw = np.sqrt(0.5) * np.sign(S2w) * np.sqrt(1 - C2w)
-        YY = np.dot(w, y ** 2)
+        YY = np.dot(w, y**2)
         YC = Ch * Cw + Sh * Sw
         YS = Sh * Cw - Ch * Sw
         CC = 0.5 * (1 + C2 * C2w + S2 * S2w)
@@ -127,7 +127,7 @@ class GLS(object):
             SS -= (S * Cw - C * Sw) ** 2
         power = YC * YC / CC + YS * YS / SS
         if self.psd:
-            power *= 0.5 * (err ** -2.0).sum()
+            power *= 0.5 * (err**-2.0).sum()
         else:
             power /= YY
         self.signal = signal
@@ -183,7 +183,7 @@ class GLS(object):
         """
         t = self.signal.time
         y = self.signal.values
-        w = self.err ** -2.0
+        w = self.err**-2.0
         y_mean = np.dot(y, w) / w.sum()
         y = y - y_mean
         X = (

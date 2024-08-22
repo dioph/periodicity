@@ -1,10 +1,10 @@
-import celerite2
 # import celerite2.pymc4
+# import pymc as pm
+# import pymc_ext as pmx
+import celerite2
 import emcee
 import george
 import numpy as np
-# import pymc as pm
-# import pymc_ext as pmx
 from scipy.optimize import minimize
 from scipy.stats import norm
 
@@ -361,7 +361,7 @@ class CeleriteModeler(object):
         mean = init_params.pop("mean")
         jitter = init_params.pop("jitter")
         self.gp = celerite2.GaussianProcess(self.kernel(**init_params), mean=mean)
-        self.gp.compute(self.t, diag=self.err ** 2 + jitter)
+        self.gp.compute(self.t, diag=self.err**2 + jitter)
 
     def prior_transform(self, u):
         raise NotImplementedError("subclasses must implement this method")
@@ -370,7 +370,7 @@ class CeleriteModeler(object):
         gp.mean = params.pop("mean")
         jitter = params.pop("jitter")
         gp.kernel = self.kernel(**params)
-        gp.compute(self.t, diag=self.err ** 2 + jitter, quiet=True)
+        gp.compute(self.t, diag=self.err**2 + jitter, quiet=True)
         return gp
 
     def get_psd(self, frequency, gp):
@@ -390,7 +390,7 @@ class CeleriteModeler(object):
         q = gp._do_solve(r[:, np.newaxis])[:, 0]
         c = gp._do_solve(np.eye(self.signal.size)).diagonal()
         return -0.5 * (
-            np.sum(q ** 2 / c)
+            np.sum(q**2 / c)
             - np.sum(np.log(c))
             + self.signal.size * np.log(2 * np.pi)
         )
@@ -488,9 +488,9 @@ class BrownianTerm(celerite2.terms.TermSum):
     def __init__(self, sigma, tau, period, mix):
         Q = 0.01
         sigma_1 = sigma * np.sqrt(mix)
-        f = np.sqrt(1 - 4 * Q ** 2)
+        f = np.sqrt(1 - 4 * Q**2)
         w0 = 2 * Q / (tau * (1 - f))
-        S0 = (1 - mix) * sigma ** 2 / (0.5 * w0 * Q * (1 + 1 / f))
+        S0 = (1 - mix) * sigma**2 / (0.5 * w0 * Q * (1 + 1 / f))
         super().__init__(
             celerite2.terms.SHOTerm(sigma=sigma_1, tau=tau, rho=period),
             celerite2.terms.SHOTerm(S0=S0, w0=w0, Q=Q),
