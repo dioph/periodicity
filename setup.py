@@ -26,14 +26,9 @@ install_requires = [
 ]
 
 extras_require = {
-    "docs": [
-        "jupyter",
-        "myst-nb",
-        "numpydoc",
-        "sphinx_rtd_theme",
-    ],
+    "docs": ["jupyter >= 1.0", "myst-nb >= 0.17", "numpydoc", "pydata-sphinx-theme"],
     "test": [
-        "black==22.3.0",
+        "black == 22.3.0",
         "flake8",
         "isort",
         "pytest",
