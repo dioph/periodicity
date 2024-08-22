@@ -17,7 +17,7 @@ install_requires = [
     "celerite2",
     "emcee >= 3.0",
     "george",
-    "pandas >= 1.2, < 1.5"
+    "pandas >= 1.2, < 1.5",
     "PyWavelets >= 0.5",
     "pymc_ext",
     "scipy >= 1.1",
