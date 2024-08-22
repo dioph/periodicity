@@ -3,8 +3,8 @@ import celerite2
 import emcee
 import george
 import numpy as np
-import pymc as pm
-import pymc_ext as pmx
+# import pymc as pm
+# import pymc_ext as pmx
 from scipy.optimize import minimize
 from scipy.stats import norm
 

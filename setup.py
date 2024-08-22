@@ -21,18 +21,18 @@ install_requires = [
     "pymc_ext",
     "scipy >= 1.1",
     "tqdm",
-    "xarray",
+    "xarray >= 0.20, < 2022",
 ]
 
 extras_require = {
     "docs": [
         "jupyter",
-        "myst-nb<0.11",
+        "myst-nb",
         "numpydoc",
         "sphinx_rtd_theme",
     ],
     "test": [
-        "black==20.8b1",
+        "black==22.3.0",
         "flake8",
         "isort",
         "pytest",
