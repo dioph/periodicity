@@ -14,19 +14,25 @@ with open("README.md", "r") as f:
 
 install_requires = [
     "bottleneck",
-    "celerite2",
+    "celerite2 >= 0.2.0, < 0.3.3",
     "emcee >= 3.0",
     "george",
+    "matplotlib",
+    "numpy < 2",
     "pandas >= 1.2, < 1.5",
     "PyWavelets >= 0.5",
-    "pymc_ext",
     "scipy >= 1.1",
     "tqdm",
     "xarray >= 0.20, < 2022",
 ]
 
 extras_require = {
-    "docs": ["jupyter >= 1.0", "myst-nb >= 0.17", "numpydoc", "pydata-sphinx-theme"],
+    "docs": [
+        "jupyter >= 1.0",
+        "myst-nb >= 0.17",
+        "numpydoc",
+        "pydata-sphinx-theme",
+    ],
     "test": [
         "black == 22.3.0",
         "flake8",
@@ -57,4 +63,5 @@ setuptools.setup(
         "Operating System :: OS Independent",
         "Intended Audience :: Science/Research",
     ],
+    python_requires=">=3.8, <3.11",
 )

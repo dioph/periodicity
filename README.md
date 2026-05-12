@@ -38,6 +38,6 @@ Alternatively, you can build the current development version from source by clon
 
 ## Development
 
-If you're interested in contributing to periodicity, install __pipenv__ and you can setup everything you need with __`pipenv install --dev`__.
+If you're interested in contributing to periodicity, you can install the development dependencies with __`pip install -e ".[test]"`__.
 
 To automatically test the project (and also check formatting, coverage, etc.), simply run __`tox`__ within the project's directory.

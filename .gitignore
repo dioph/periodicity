@@ -6,7 +6,7 @@ htmlcov
 .vscode
 __pycache__
 *.pyc
-venv
+.venv
 dist
 build
 .pytest_cache
