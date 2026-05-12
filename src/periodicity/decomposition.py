@@ -329,7 +329,7 @@ class CEEMDAN(object):
             residue_imfs = self.emd(residue)
             if len(residue_imfs) <= 1:
                 if len(imfs) < max_modes and len(residue_imfs) == 1:
-                    imfs.append(residue)
+                    imfs.append(residue_imfs[0])
                 break
 
         # Undoes the initial normalization
