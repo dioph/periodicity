@@ -551,8 +551,12 @@ class TSeries(Signal):
         coefs = np.fft.rfft(self.values, n=nfft)
         return FSeries(freqs, coefs)
 
-    def psd(self, *args, **kwargs):
-        return np.square(np.abs(self.fft(*args, **kwargs)))
+    def psd(self, **kwargs):
+        dt = kwargs.pop("dt", None)
+        if dt is None:
+            dt = self.dt
+        norm = 2 * dt / self.size
+        return np.square(np.abs(self.fft(dt=dt, **kwargs))) * norm
 
     def dropna(self):
         return self.from_xray(self._array.dropna("time"))
@@ -574,6 +578,27 @@ class TSeries(Signal):
         fit = self._replace_data(fun(self.time, *popt))
         fit.attrs.update(coefficients=popt, covariance=pcov)
         return fit
+
+    def rolling(self, window, func, min_samples=None, **func_kwargs):
+        return self.from_xray(
+            self._array.rolling(
+                time=window, min_periods=min_samples, center=True
+            ).reduce(func, **func_kwargs)
+        )
+
+    def sliding(self, window, dt, func, min_samples=0, **func_kwargs):
+        t0, y0 = [], []
+        t = self.time
+        ti = t[0]
+        while ti < self.time[-1]:
+            mask = (t >= ti) & (t <= ti + window)
+            if mask.sum() < min_samples:
+                y0 = np.append(y0, np.nan)
+            else:
+                y0 = np.append(y0, func(self[mask], **func_kwargs))
+            t0 = np.append(t0, ti + window / 2)
+            ti = ti + dt
+        return TSeries(t0, y0, assume_sorted=True)
 
     def acf(self, max_lag=None, unbias=False):
         """Auto-Correlation Function implemented using IFFT of the power spectrum.
@@ -982,6 +1007,21 @@ class FSeries(Signal):
         dt = 1 / (coefs.size * self.df)
         time = np.arange(coefs.size) * dt
         return TSeries(time, coefs)
+
+    def logmedian(self, width):
+        count = np.zeros(len(self.frequency), dtype=int)
+        bkg = np.zeros_like(self.frequency)
+        x0 = np.log10(self.frequency[0])
+        corr_factor = (8.0 / 9.0) ** 3
+        while x0 < np.log10(self.frequency[-1]):
+            m = np.abs(np.log10(self.frequency) - x0) < width
+            if len(bkg[m] > 0):
+                bkg[m] += np.nanmedian(self.values[m]) / corr_factor
+                count[m] += 1
+            x0 += 0.5 * width
+        bkg /= count
+        smooth_pg = self._replace_data(bkg)
+        return smooth_pg
 
     def dropna(self):
         return self.from_xray(self._array.dropna("frequency"))
